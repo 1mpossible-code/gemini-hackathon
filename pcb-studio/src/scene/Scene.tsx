@@ -3,7 +3,7 @@
 import { memo, useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
-import { CameraControls, Html, Line } from '@react-three/drei'
+import { CameraControls, Line } from '@react-three/drei'
 import { EffectComposer, N8AO, SMAA, Bloom } from '@react-three/postprocessing'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import type { Board, Part } from '@/data/board'
@@ -14,6 +14,7 @@ import { buildPart, partHeight } from './packages'
 import { surfaceMap } from './vendor/surface-maps'
 import { SystemRoot } from './System'
 import { handoff, takeHandoff } from './handoff'
+import { LabelOverlay, ProjectedLabel } from './ProjectedLabel'
 
 const FLOOR_Y = -3.4
 const SYSTEM_FLOOR_Y = -44.2
@@ -165,7 +166,6 @@ export const Parts = memo(function Parts({ board, passive = false }: { board: Bo
   }, [board])
   const leaderMat = useRef<THREE.LineDashedMaterial>(null)
   const offsets = useRef<number[]>(board.parts.map(() => 0))
-  const majors = board.parts.filter((p) => p.major).map((p) => p.ref)
 
   useEffect(() => {
     anim.current = { since: performance.now(), from: anim.current.to, to: exploded ? 1 : 0 }
@@ -228,15 +228,7 @@ export const Parts = memo(function Parts({ board, passive = false }: { board: Bo
           {!passive &&
             ((labelMode === 'all' && p.major) ||
               (labelMode === 'contextual' && (selected === p.ref || hovered === p.ref))) && (
-            <Html position={[0, partHeight(p) + 2.2, 0]} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
-              <div className={`forge-tag ${selected === p.ref ? 'is-active' : ''}`}>
-                {labelMode === 'all' && (
-                  <span className="forge-tag-n">{String(majors.indexOf(p.ref) + 1).padStart(2, '0')}</span>
-                )}
-                <span>{p.name}</span>
-                <span className="forge-tag-sub">{p.ref}</span>
-              </div>
-            </Html>
+            <ProjectedLabel position={[0, partHeight(p) + 2.2, 0]} title={p.name} subtitle={p.ref} active={selected === p.ref} />
           )}
         </group>
       ))}
@@ -478,22 +470,28 @@ function BoardRoot() {
 }
 
 export function PcbScene() {
+  const overlay = useRef<HTMLDivElement>(null)
   const scale = useStudio((s) => s.scale)
   return (
-    <Canvas
-      shadows="soft"
-      dpr={[1, 2]}
-      gl={{ preserveDrawingBuffer: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
-      camera={{ position: [60, 80, 100], fov: 32, near: 0.5, far: 2000 }}
-      onPointerMissed={() => setStudio({ selected: null })}
-    >
-      <Studio />
-      {scale === 'system' ? <SystemRoot /> : <BoardRoot />}
-      {FX && (<EffectComposer multisampling={0} enableNormalPass={false}>
-        <N8AO aoRadius={2.2} intensity={2.4} distanceFalloff={0.6} quality="medium" halfRes />
-        <Bloom intensity={0.25} luminanceThreshold={0.92} mipmapBlur />
-        <SMAA />
-      </EffectComposer>)}
-    </Canvas>
+    <LabelOverlay.Provider value={overlay}>
+      <div className="relative h-full w-full">
+        <Canvas
+          shadows="soft"
+          dpr={[1, 2]}
+          gl={{ preserveDrawingBuffer: true, antialias: true, toneMapping: THREE.ACESFilmicToneMapping, toneMappingExposure: 1.05 }}
+          camera={{ position: [60, 80, 100], fov: 32, near: 0.5, far: 2000 }}
+          onPointerMissed={() => setStudio({ selected: null })}
+        >
+          <Studio />
+          {scale === 'system' ? <SystemRoot /> : <BoardRoot />}
+          {FX && (<EffectComposer multisampling={0} enableNormalPass={false}>
+            <N8AO aoRadius={2.2} intensity={2.4} distanceFalloff={0.6} quality="medium" halfRes />
+            <Bloom intensity={0.25} luminanceThreshold={0.92} mipmapBlur />
+            <SMAA />
+          </EffectComposer>)}
+        </Canvas>
+        <div ref={overlay} className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true" />
+      </div>
+    </LabelOverlay.Provider>
   )
 }
