@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { loadEnv, runnerImport, type Plugin } from 'vite'
-import { callGemini, MODELS, resolveApiKey } from './gemini.ts'
+import { callGemini, resolveApiKey } from './gemini.ts'
 import { verifyCertificate } from './verify.ts'
 import type { Certificate } from '../src/verify/types.ts'
 
@@ -147,7 +147,103 @@ function segDistSq(a: [number, number], b: [number, number], c: [number, number]
 
 const canonicalNet = (n: string) => (n === 'VM' ? 'VIN' : n)
 
-function stabilizeGeometryAndClearances(board: BoardData, fp: FootprintMod): string[] {
+function findTraceConflicts(b: BoardData, fp: FootprintMod): [number, number][] {
+  const routed = fp.routeNets(b)
+  const pairs: [number, number][] = []
+  for (let i = 0; i < routed.length; i++) {
+    for (let j = i + 1; j < routed.length; j++) {
+      const ti = routed[i]
+      const tj = routed[j]
+      if (ti.layer !== tj.layer) continue
+      if (canonicalNet(ti.net) === canonicalNet(tj.net)) continue
+      const req = (ti.width + tj.width) / 2 + 0.135
+      const reqSq = req * req
+      let hit = false
+      for (let si = 0; si < ti.points.length - 1 && !hit; si++) {
+        for (let sj = 0; sj < tj.points.length - 1 && !hit; sj++) {
+          if (segDistSq(ti.points[si], ti.points[si + 1], tj.points[sj], tj.points[sj + 1]) < reqSq) {
+            hit = true
+          }
+        }
+      }
+      if (hit) pairs.push([i, j])
+    }
+  }
+  return pairs
+}
+
+const REPAIR_MODELS: Record<string, string> = {
+  neon: 'gemini-4-neon',
+  hydrogen: 'gemini-4-hydrogen',
+  carbon: 'gemini-4-carbon',
+  'gemini-4-neon': 'gemini-4-neon',
+  'gemini-4-hydrogen': 'gemini-4-hydrogen',
+  'gemini-4-carbon': 'gemini-4-carbon',
+}
+
+function resolveRepairModel(requested: unknown, env: Record<string, string | undefined>): string | null {
+  const raw = typeof requested === 'string' && requested.trim() ? requested.trim() : (env.GEMINI_REPAIR_MODEL?.trim() || 'neon')
+  return Object.hasOwn(REPAIR_MODELS, raw) ? REPAIR_MODELS[raw] : null
+}
+
+function repairNetGeometry(board: BoardData, routed: ReturnType<FootprintMod['routeNets']>, index: number) {
+  const n = board.nets[index]
+  const pts = routed[index]?.points ?? []
+  const pt = (p: [number, number]) => [+p[0].toFixed(2), +p[1].toFixed(2)]
+  return {
+    index,
+    name: n.name,
+    path: n.path,
+    layer: n.layer ?? 'top',
+    width: n.width ?? 0.35,
+    ...(n.via?.length ? { via: n.via } : {}),
+    ...(pts.length ? { start: pt(pts[0]), end: pt(pts[pts.length - 1]) } : {}),
+  }
+}
+
+function buildRepairPrompt(
+  board: BoardData,
+  fp: FootprintMod,
+  failedTheorems: { name: string; statement: string }[],
+  diagnostics: string[],
+) {
+  const violations = diagnostics.filter((d) => !d.startsWith('warning|') && !d.startsWith('info|')).slice(0, 6)
+  const routed = fp.routeNets(board)
+  const conflicts = findTraceConflicts(board, fp)
+  const affectedNetIds = new Set<number>()
+  for (const [i, j] of conflicts.slice(0, 10)) {
+    affectedNetIds.add(i)
+    affectedNetIds.add(j)
+  }
+  const nonClearance = violations.filter((d) => !d.startsWith('trace_clearance|'))
+  board.nets.forEach((n, idx) => {
+    if (nonClearance.some((v) => v.includes(`|${n.name} `) || v.includes(`|${n.name}:`))) affectedNetIds.add(idx)
+  })
+  const affectedNets = [...affectedNetIds].sort((a, b) => a - b).slice(0, 16).map((index) => repairNetGeometry(board, routed, index))
+  const layoutViolations = violations.filter((d) => d.startsWith('parts_within_outline|') || d.startsWith('no_part_overlap|'))
+  const affectedParts = layoutViolations.length
+    ? board.parts
+        .filter((p) => layoutViolations.some((v) => v.includes(p.ref)))
+        .map((p) => ({ ref: p.ref, x: p.x, y: p.y, rot: p.rot }))
+    : []
+  return {
+    boardSize: { width: board.width, height: board.height },
+    failedTheorems: failedTheorems.map((t) => ({ name: t.name, statement: t.statement })),
+    violations,
+    traceConflicts: conflicts.slice(0, 12).map(([a, b]) => ({
+      a,
+      aNet: board.nets[a].name,
+      b,
+      bNet: board.nets[b].name,
+      layer: board.nets[a].layer ?? 'top',
+    })),
+    affectedNets,
+    ...(affectedParts.length ? { affectedParts } : {}),
+    permittedEdits: 'netEdits: change layer ("top"|"bottom") or width (0.15-2.5 mm) by net index; partMoves: {ref,x,y}; optional width/height.',
+  }
+}
+
+export function stabilizeGeometryAndClearances(board: BoardData, fp: FootprintMod): string[] {
   const notes: string[] = []
   const halfW = board.width / 2
   const halfH = board.height / 2
@@ -187,30 +283,7 @@ function stabilizeGeometryAndClearances(board: BoardData, fp: FootprintMod): str
   }
 
   // 3. Resolve same-layer trace clearance violations via layer separation & perimeter bypass
-  const traceConflicts = (b: BoardData): [number, number][] => {
-    const routed = fp.routeNets(b)
-    const pairs: [number, number][] = []
-    for (let i = 0; i < routed.length; i++) {
-      for (let j = i + 1; j < routed.length; j++) {
-        const ti = routed[i]
-        const tj = routed[j]
-        if (ti.layer !== tj.layer) continue
-        if (canonicalNet(ti.net) === canonicalNet(tj.net)) continue
-        const req = (ti.width + tj.width) / 2 + 0.135
-        const reqSq = req * req
-        let hit = false
-        for (let si = 0; si < ti.points.length - 1 && !hit; si++) {
-          for (let sj = 0; sj < tj.points.length - 1 && !hit; sj++) {
-            if (segDistSq(ti.points[si], ti.points[si + 1], tj.points[sj], tj.points[sj + 1]) < reqSq) {
-              hit = true
-            }
-          }
-        }
-        if (hit) pairs.push([i, j])
-      }
-    }
-    return pairs
-  }
+  const traceConflicts = (b: BoardData) => findTraceConflicts(b, fp)
 
   let conflicts = traceConflicts(board)
   if (conflicts.length > 0) {
@@ -264,6 +337,48 @@ function stabilizeGeometryAndClearances(board: BoardData, fp: FootprintMod): str
         break
       }
     }
+    // shortcut: bounded local search can stall; use rip-up routing if detours cannot reduce conflicts.
+    // Search both ends of every conflict; one blocked trace must not stop repair.
+    for (let pass = 0; pass < 200 && conflicts.length; pass++) {
+      let improved = false
+      const targets = [...new Set(conflicts.flat())]
+      for (const index of targets) {
+        const target = board.nets[index]
+        const previous = { layer: target.layer, via: target.via }
+        const margin = 1 + (target.width ?? 0.35) / 2
+        const xs = [-halfW + margin, -halfW / 2, 0, halfW / 2, halfW - margin]
+        const ys = [-halfH + margin, -halfH / 2, 0, halfH / 2, halfH - margin]
+        const candidates: (BoardNet['via'])[] = [previous.via, [[0, -28.2]], [[-11, 28.2], [11, 28.2]], [[-31, -24], [-14, -24]], [[-31, 23], [-17, 23]], [[17, 23], [31, 23]], [[-20, -10]], [[20, -10]]]
+        const points = fp.routeNets(board)[index].points
+        const start = points[0]
+        const end = points[points.length - 1]
+        // Escape fine-pitch pads perpendicular to the row before taking a detour.
+        for (const offset of [-2, -1, 1, 2]) {
+          for (const y of ys) candidates.push([[start[0], start[1] + offset], [start[0], y], [end[0], y], [end[0], end[1] + offset]])
+          for (const x of xs) candidates.push([[start[0] + offset, start[1]], [x, start[1]], [x, end[1]], [end[0] + offset, end[1]]])
+        }
+        for (const x of xs) for (const y of ys) candidates.push([[x, y]])
+        for (const y of ys) candidates.push([[-halfW + margin, y], [halfW - margin, y]])
+        for (const x of xs) candidates.push([[x, -halfH + margin], [x, halfH - margin]])
+        for (const layer of ['top', 'bottom'] as const) {
+          for (const via of candidates) {
+            target.layer = layer
+            target.via = via
+            const next = traceConflicts(board)
+            if (next.length >= conflicts.length) continue
+            conflicts = next
+            notes.push(`Rerouted ${target.name} (${target.path.join('→')}) on ${layer}`)
+            improved = true
+            break
+          }
+          if (improved) break
+        }
+        if (improved) break
+        target.layer = previous.layer
+        target.via = previous.via
+      }
+      if (!improved) break
+    }
   }
   return notes
 }
@@ -294,9 +409,6 @@ export function repairPlugin(): Plugin {
         try {
           const body = await readJson(req)
           const inputBoard = body.board as BoardData | undefined
-          const suppliedVerification = body.verification as
-            | { status?: string; theorems?: { name: string; statement: string; ok: boolean; error?: string }[]; diagnostics?: string[] }
-            | undefined
           if (!inputBoard || !Array.isArray(inputBoard.parts) || !Array.isArray(inputBoard.nets)) {
             return sendJson(res, 400, { error: 'expected { board }' })
           }
@@ -306,10 +418,8 @@ export function repairPlugin(): Plugin {
           }
           const fpMod = (await server.ssrLoadModule('/src/pcb/footprint.ts')) as FootprintMod
 
-          const initialVer =
-            suppliedVerification && Array.isArray(suppliedVerification.theorems) && suppliedVerification.theorems.length > 0
-              ? suppliedVerification
-              : await verifyCertificate(toLeanMod.buildCertificate(inputBoard), verifyDir, 60_000)
+          // Never trust a caller's proof: recompute from this exact board and revision.
+          const initialVer = await verifyCertificate(toLeanMod.buildCertificate(inputBoard), verifyDir, 60_000)
           if (initialVer.status === 'passed') {
             return sendJson(res, 200, {
               repaired: true,
@@ -321,39 +431,47 @@ export function repairPlugin(): Plugin {
             })
           }
 
+          const model = resolveRepairModel(body.model, env)
+          if (!model) {
+            return sendJson(res, 400, { error: 'unsupported repair model (expected neon, hydrogen, or carbon)' })
+          }
+
           const working: BoardData = JSON.parse(JSON.stringify(inputBoard))
           const failedTheorems = (initialVer.theorems ?? []).filter((t) => !t.ok)
           const apiKey = resolveApiKey(env)
           let aiRationale = ''
+          let geminiLatencyMs: number | null = null
+          let geminiError: string | null = null
+          let promptTokens: number | null = null
+          let outputTokens: number | null = null
+          let promptChars: number | null = null
           let actor: 'gemini' | 'deterministic_solver' = 'deterministic_solver'
 
           if (apiKey) {
+            const started = performance.now()
             try {
-              const model = MODELS.carbon
-              const promptSummary = {
-                boardSize: { width: working.width, height: working.height },
-                failedTheorems: failedTheorems.map((t) => ({ name: t.name, statement: t.statement, error: t.error })),
-                diagnostics: (initialVer.diagnostics ?? []).slice(0, 12),
-                nets: working.nets.map((n, index) => ({
-                  index,
-                  name: n.name,
-                  path: n.path,
-                  layer: n.layer ?? 'top',
-                  width: n.width ?? 0.35,
-                })),
-              }
-              const patch = (await callGemini(apiKey, {
-                model,
-                system:
-                  'You are Forge PCB Studio autonomous Lean 4 repair engineer. Given failed formal PCB theorems and diagnostics, ' +
-                  'propose minimal netEdits (switching crossing traces between top and bottom copper or widening traces for ampacity) ' +
-                  'or partMoves to satisfy all JLCPCB 2-layer and electrical rules. Keep response compact.',
-                prompt: JSON.stringify(promptSummary),
-                schema: REPAIR_SCHEMA,
-                temperature: 0.2,
-                signal: AbortSignal.timeout(12_000),
-                timeoutMs: 12_000,
-              })) as {
+              const prompt = JSON.stringify(buildRepairPrompt(working, fpMod, failedTheorems, initialVer.diagnostics ?? []))
+              promptChars = prompt.length
+              const patch = (await callGemini(
+                apiKey,
+                {
+                  model,
+                  system:
+                    'You are Forge PCB Studio autonomous Lean 4 repair engineer. Given failed formal PCB theorems, violations, and affected nets, ' +
+                    'propose minimal netEdits (switching crossing traces between top and bottom copper or widening traces for ampacity) ' +
+                    'or partMoves to satisfy all JLCPCB 2-layer and electrical rules. Return compact JSON only.',
+                  prompt,
+                  schema: REPAIR_SCHEMA,
+                  temperature: 0.2,
+                  thinkingBudget: 256,
+                  signal: AbortSignal.timeout(30_000),
+                  timeoutMs: 30_000,
+                },
+                (u) => {
+                  promptTokens = u.promptTokens ?? null
+                  outputTokens = u.outputTokens ?? null
+                },
+              )) as {
                 width?: number
                 height?: number
                 partMoves?: { ref: string; x: number; y: number }[]
@@ -384,8 +502,10 @@ export function repairPlugin(): Plugin {
                 }
               }
               aiRationale = patch.rationale ?? ''
-            } catch {
-              /* fall through to deterministic routing/bounds repair if Gemini call times out */
+            } catch (error) {
+              geminiError = error instanceof Error ? error.message : String(error)
+            } finally {
+              geminiLatencyMs = Math.round(performance.now() - started)
             }
           }
 
@@ -405,6 +525,15 @@ export function repairPlugin(): Plugin {
             repaired: nextVer.status === 'passed',
             attempts: 1,
             actor,
+            deterministicAdjustments: geoNotes.length,
+            gemini: {
+              model,
+              latencyMs: geminiLatencyMs,
+              promptChars,
+              promptTokens,
+              outputTokens,
+              error: geminiError ?? (apiKey ? null : 'No API key configured'),
+            },
             rationale: summaryNotes || 'Adjusted copper layers and clearances and re-verified in Lean 4.',
             board: working,
             verification: nextVer,

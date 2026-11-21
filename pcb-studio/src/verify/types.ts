@@ -21,6 +21,8 @@ export interface Verification {
   /** modelling assumptions used for this board (lookup-table values, aliases) */
   assumptions?: string[]
   cached?: boolean
+  /** SHA-256 of the exact Lean source checked, including board revision. */
+  certificateSha256?: string
 }
 
 /** One theorem in the generated certificate, with its 1-based line span in Generated.lean. */
