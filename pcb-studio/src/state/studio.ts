@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 import { board as defaultBoard, type Board } from '@/data/board'
-import { defaultSystem, type SystemDesign } from '@/data/system'
+import { defaultSystem, systemFromPrompt, type SystemDesign } from '@/data/system'
 import type { Verification } from '@/verify/types'
 import type { OfferMatchKind, ShopOffer, ShopSearchEntry } from '@/data/shop'
 
@@ -81,7 +81,7 @@ let state: StudioState = {
   scale: new URLSearchParams(location.search).get('scale') === 'board' || new URLSearchParams(location.search).has('brief') ? 'board' : 'system',
   mode: new URLSearchParams(location.search).get('mode') === 'engineer' || new URLSearchParams(location.search).has('brief') ? 'engineer' : 'research',
   pendingPrompt: briefFromUrl(),
-  system: defaultSystem,
+  system: briefFromUrl() ? systemFromPrompt(briefFromUrl()!) : defaultSystem,
   device: null,
   hoveredDevice: null,
   board: defaultBoard,

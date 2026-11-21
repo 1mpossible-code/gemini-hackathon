@@ -5,6 +5,7 @@ import { checkBoard } from './check'
 import { buildBoardNets, validateNets, type NetIssue, type ProposedNet } from './netlist'
 import { groundVias, isEdgeConnector, placeParts, type Edge, type PlaceHint } from './place'
 import type { CatalogItem, GenEvent, GenRequest, GenStage, LlmCall, Schema } from './types'
+export { offlineLlm } from './offline'
 
 /**
  * Server-side generation pipeline (loaded by server/ through Vite SSR, never

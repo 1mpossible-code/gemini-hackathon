@@ -41,8 +41,9 @@ function anchorLocal(d: SystemDevice) {
 
 function Chassis({ sys }: { sys: SystemDesign }) {
   const { w, d, t } = sys.chassis
+  const band = sys.form === 'band'
   const plate = useMemo(() => {
-    const r = 10
+    const r = band ? w / 2 - 0.5 : 10
     const s = new THREE.Shape()
     s.moveTo(-w / 2 + r, -d / 2)
     s.lineTo(w / 2 - r, -d / 2)
@@ -53,8 +54,14 @@ function Chassis({ sys }: { sys: SystemDesign }) {
     s.quadraticCurveTo(-w / 2, d / 2, -w / 2, d / 2 - r)
     s.lineTo(-w / 2, -d / 2 + r)
     s.quadraticCurveTo(-w / 2, -d / 2, -w / 2 + r, -d / 2)
-    // lightening slots down both sides
-    for (const sx of [-1, 1]) {
+    // lightening slots down both sides (a band gets a row of strap holes instead)
+    if (band) {
+      for (let z = d / 2 - 30; z > d / 2 - 90; z -= 12) {
+        const hole = new THREE.Path()
+        hole.absarc(0, z, 2.2, 0, Math.PI * 2, true)
+        s.holes.push(hole)
+      }
+    } else for (const sx of [-1, 1]) {
       for (let i = 0; i < 4; i++) {
         const cz = -d / 2 + 52 + i * ((d - 104) / 3)
         const hole = new THREE.Path()
@@ -65,10 +72,11 @@ function Chassis({ sys }: { sys: SystemDesign }) {
     const g = new THREE.ExtrudeGeometry(s, { depth: t, bevelEnabled: true, bevelSize: 0.6, bevelThickness: 0.6, bevelSegments: 3, curveSegments: 24 })
     g.rotateX(Math.PI / 2)
     return g
-  }, [w, d, t])
+  }, [w, d, t, band])
   // M3 hole grid as instanced dark discs
   const grid = useMemo(() => {
     const pts: [number, number][] = []
+    if (band) return pts
     for (let x = -w / 2 + 26; x <= w / 2 - 26; x += 10) {
       for (let z = -d / 2 + 14; z <= d / 2 - 14; z += 10) {
         if (Math.abs(x) < 46 && Math.abs(z) < 36) continue // under the PCB
@@ -77,7 +85,7 @@ function Chassis({ sys }: { sys: SystemDesign }) {
       }
     }
     return pts
-  }, [w, d])
+  }, [w, d, band])
   const inst = useRef<THREE.InstancedMesh>(null)
   useEffect(() => {
     const m = inst.current

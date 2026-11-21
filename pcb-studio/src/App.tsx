@@ -21,7 +21,7 @@ import { Tip, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { ResearchPane } from '@/components/Research'
 import { ScaleSwitch, ScaleTransition, SystemInspector, SystemLibrary } from '@/components/SystemPanels'
-import { systemCost } from '@/data/system'
+import { DEMO_BRIEFS, systemCost, systemFromPrompt } from '@/data/system'
 
 const ease = [0.16, 1, 0.3, 1] as const
 
@@ -271,6 +271,8 @@ function Prompt() {
     const text_ = override ?? text
     if (!text_.trim() || busy) return
     setBusy(true); setError(null); setLog([])
+    // The off-board system follows the brief right away, even before the board arrives.
+    setStudio({ system: systemFromPrompt(text_), selected: null, device: null })
     try {
       const loader = aiModules['./ai/generate.ts']
       if (!loader) throw new Error('Generation service not installed')
@@ -308,6 +310,20 @@ function Prompt() {
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : 'Generate'}
         </Button>
       </form>
+      {!busy && (
+        <div className="mt-2 flex flex-wrap justify-center gap-1.5" role="group" aria-label="Demo briefs">
+          {DEMO_BRIEFS.map((d) => (
+            <button
+              key={d.id}
+              type="button"
+              onClick={() => { setText(d.brief); void run(d.brief) }}
+              className="label-mono rounded-md border border-border bg-background/70 px-2 py-1 !text-[10px] text-muted-foreground backdrop-blur-md hover:border-foreground/40 hover:text-foreground"
+            >
+              {d.label}
+            </button>
+          ))}
+        </div>
+      )}
       <AnimatePresence>
         {(busy || error) && (
           <motion.div
@@ -324,7 +340,7 @@ function Prompt() {
                   <span className="truncate">{l.message}</span>
                 </motion.div>
               ))}
-              {busy && !log.length && <div className="text-muted-foreground">Contacting Gemini…</div>}
+              {busy && !log.length && <div className="text-muted-foreground">Planning board…</div>}
               {error && <div className="text-red-300">{error}</div>}
             </div>
           </motion.div>

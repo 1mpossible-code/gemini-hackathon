@@ -33,6 +33,8 @@ export interface SystemDevice {
 
 export interface SystemDesign {
   name: string
+  /** plate: flat chassis (rovers, enclosures). band: wrist strap for wearables. */
+  form?: 'plate' | 'band'
   chassis: { w: number; d: number; t: number }
   pcbHeight: number // standoff height under the custom PCB
   devices: SystemDevice[]
@@ -59,6 +61,167 @@ export const defaultSystem: SystemDesign = {
     { id: 'leds', catalogId: 'ws2812b-strip', label: 'Light bar', role: 'Lighting · 1-wire', bus: 'data', port: 'J7', x: 0, z: 104, y: 0, rot: 0, rail: 5 },
   ],
 }
+
+// ---------------------------------------------------------------- generated systems
+
+const WEARABLE = /(wrist|bracelet|wearable|smartwatch|\bwatch\b|armband|forearm|glove|sleeve|\bstrap\b|\bband\b)/i
+const VEHICLE = /\b(rover|robot|car|wheel(ed)?|4wd|2wd|chassis|tank|buggy|drive|line[- ]follow)/i
+const SKIP: string[] = ['board', 'mcu', 'module', 'passive', 'connector', 'driver', 'indicator']
+// Words that map to catalog items even when the brief does not name the part.
+const SYNONYMS: [RegExp, string][] = [
+  [/\b(emg|muscle|myo|electromyograph)/i, 'myoware-emg'],
+  [/\b(imu|accel|gyro|motion|orientation|tilt|gesture)/i, 'mpu6050'],
+  [/\b(heart|pulse|spo2|oximet)/i, 'max30102'],
+  [/\b(temperature|humidity|weather|climate)/i, 'bme280'],
+  [/\b(distance|ultrasonic|sonar|obstacle)/i, 'hcsr04'],
+  [/\b(lidar|time[- ]of[- ]flight|tof)\b/i, 'vl53l0x'],
+  [/\b(display|screen|oled|status)\b/i, 'ssd1306-096'],
+  [/\b(e-?ink|e-?paper)/i, 'epaper-29'],
+  [/\b(led strip|light bar|neopixel|rgb)/i, 'ws2812b-strip'],
+  [/\b(haptic|vibrat|buzz|alarm|beep)/i, 'buzzer-active'],
+  [/\b(servo)/i, 'sg90'],
+  [/\b(stepper)/i, '28byj-48'],
+  [/\b(pump|valve|solenoid|relay|water)/i, 'relay-1ch'],
+  [/\b(gps|location|track)/i, 'neo6m'],
+  [/\b(lora|long range)/i, 'rfm95w'],
+  [/\b(motion sensor|pir|presence)/i, 'hcsr501'],
+  [/\b(mic|microphone|voice|audio|sound)/i, 'inmp441'],
+  [/\b(speaker|amp)/i, 'max98357a'],
+  [/\b(button|press|click)/i, 'tact-6mm'],
+  [/\b(knob|encoder|dial)/i, 'ec11'],
+  [/\b(touch)/i, 'ttp223'],
+  [/\b(joystick|gamepad|controller)/i, 'joystick-ky023'],
+  [/\b(keypad)/i, 'keypad-4x4'],
+  [/\b(sd card|log|storage)/i, 'microsd-module'],
+  [/\b(soil|moisture|plant)/i, 'ads1115'],
+  [/\b(current|power monitor)/i, 'ina219'],
+  [/\b(color|colour)/i, 'tcs34725'],
+  [/\b(temp probe|ds18b20|waterproof temp)/i, 'ds18b20'],
+]
+
+function busFor(item: CatalogItem): Bus {
+  if (item.category === 'actuator' && item.footprint.kind === 'terminal') return 'motor'
+  if (item.category === 'power') return 'power'
+  if (item.interfaces.includes('i2c')) return 'i2c'
+  if (/ws2812|strip|uart|spi|i2s/.test(item.id + item.interfaces.join(' '))) return 'data'
+  return 'gpio'
+}
+
+function railFor(item: CatalogItem, bus: Bus, battery: number): number {
+  if (bus === 'motor' || bus === 'power') return battery
+  if (item.voltage.min <= 3.3 && item.voltage.max >= 3.3) return 3.3
+  return 5
+}
+
+/** Catalog items a brief asks for: explicit names first, then synonyms. */
+export function devicesForBrief(text: string): CatalogItem[] {
+  const lower = text.toLowerCase()
+  const words = new Set(lower.split(/[^a-z0-9.+-]+/).filter((w) => w.length > 2))
+  const scored = new Map<string, number>()
+  for (const item of catalog) {
+    if (SKIP.includes(item.category) || item.category === 'power') continue
+    let score = 0
+    if (lower.includes(item.id)) score += 6
+    if (item.mpn && lower.includes(item.mpn.toLowerCase())) score += 6
+    const nameHead = item.name.toLowerCase().split(/[ ,/]+/)[0]
+    if (nameHead.length > 3 && words.has(nameHead)) score += 4
+    for (const tag of item.tags) if (tag.length > 2 && !GENERIC_TAGS.has(tag) && words.has(tag.toLowerCase())) score += 3
+    if (score) scored.set(item.id, score)
+  }
+  for (const [re, id] of SYNONYMS) if (re.test(text) && byId[id]) scored.set(id, (scored.get(id) ?? 0) + 2)
+  return [...scored.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .map(([id]) => byId[id])
+    .reduce<CatalogItem[]>((out, item) => {
+      // One part per job: skip items that share a functional tag with a better match.
+      const jobs = item.tags.filter((t) => !GENERIC_TAGS.has(t) && t !== item.id)
+      if (!out.some((o) => o.tags.some((t) => jobs.includes(t)))) out.push(item)
+      return out
+    }, [])
+    .slice(0, 7)
+}
+
+function titleFor(text: string, fallback: string) {
+  const m = text.match(/(?:design|build|make|create)?\s*(?:an?|the)?\s*([a-z0-9 -]{3,40}?)\s+(?:using|with|that|for|which|to)\b/i)
+  const raw = (m?.[1] ?? text.split(/[.,]/)[0]).trim().split(/\s+/).filter((w) => !/^(and|or|of|the|an?|my)$/i.test(w)).slice(-3).join(' ')
+  const t = raw.replace(/\b\w/g, (c) => c.toUpperCase())
+  return t.length >= 3 && t.length <= 32 ? t : fallback
+}
+
+const GENERIC_TAGS = new Set(['breakout', 'module', 'sensor', 'i2c', 'spi', 'uart', 'gpio', 'adc', 'analog', 'digital', '3.3v', '5v', 'light', 'led', 'board', 'power', 'low-power'])
+
+const port = (i: number) => `J${i + 2}`
+
+function wearable(text: string, picks: CatalogItem[]): SystemDesign {
+  const emg = picks.filter((p) => p.id === 'myoware-emg')
+  const others = picks.filter((p) => p.id !== 'myoware-emg').slice(0, 4)
+  // Gesture bands read several muscle groups: three EMG channels around the forearm.
+  const channels = emg.length ? (/\b(single|one)\b/i.test(text) ? 1 : 3) : 0
+  const devices: SystemDevice[] = []
+  const slots = [-62, 62, -96, 96, -128, 128]
+  let slot = 0
+  for (let i = 0; i < channels; i++) {
+    devices.push({ id: `emg${i + 1}`, catalogId: 'myoware-emg', label: `EMG channel ${i + 1}`, role: `Muscle · ADC${i + 1}`, bus: 'gpio', port: 'J2', x: 0, z: slots[slot++], y: 0, rot: 90, rail: 3.3 })
+  }
+  others.forEach((item, i) => {
+    const bus = busFor(item)
+    devices.push({ id: `${item.id}-${i}`, catalogId: item.id, label: item.name, role: `${item.category} · ${bus.toUpperCase()}`, bus, port: port(i + 1), x: 0, z: slots[slot++] ?? 150, y: 0, rot: 90, rail: railFor(item, bus, 3.7) })
+  })
+  devices.push({ id: 'bat', catalogId: 'lipo-jst-ph-2', label: 'Battery', role: 'Power · 1S LiPo', bus: 'power', port: 'J1', x: 0, z: slots[slot++] ?? -150, y: 0, rot: 90, rail: 3.7 })
+  return { name: titleFor(text, 'Wearable W1'), form: 'band', chassis: { w: 46, d: 330, t: 2.5 }, pcbHeight: 5, devices }
+}
+
+function plate(text: string, picks: CatalogItem[]): SystemDesign {
+  const motors = picks.filter((p) => busFor(p) === 'motor')
+  const rest = picks.filter((p) => busFor(p) !== 'motor')
+  const n = rest.length
+  const d = Math.max(180, 120 + Math.ceil(n / 2) * 42)
+  const w = 170
+  const devices: SystemDevice[] = []
+  motors.slice(0, 4).forEach((item, i) => {
+    const x = i % 2 ? 50 : -50
+    const z = i < 2 ? -d / 2 + 40 : d / 2 - 40
+    devices.push({ id: `m${i + 1}`, catalogId: item.id, label: `Drive ${i + 1}`, role: `Drive · ${port(i)}`, bus: 'motor', port: port(i), x, z, y: -22.5, rot: x < 0 ? 0 : 180, rail: 7.4 })
+  })
+  rest.forEach((item, i) => {
+    const bus = busFor(item)
+    const side = i % 2 ? 1 : -1
+    const row = Math.floor(i / 2)
+    const rows = Math.max(1, Math.ceil(n / 2))
+    const z = -d / 2 + 30 + (row + 0.5) * ((d - 60) / rows)
+    const x = Math.abs(z) < 48 ? side * (w / 2 - 22) : side * 34
+    devices.push({ id: `${item.id}-${i}`, catalogId: item.id, label: item.name, role: `${item.category} · ${bus.toUpperCase()}`, bus, port: port(motors.length + i), x, z, y: bus === 'gpio' && item.id === 'hcsr04' ? 0 : 4, rot: 0, stand: item.id === 'hcsr04' || undefined, rail: railFor(item, bus, 7.4) })
+  })
+  devices.push({ id: 'bat', catalogId: 'holder-18650', label: 'Battery', role: 'Power · 2S Li-ion', bus: 'power', port: 'J1', x: 0, z: d / 2 - 22, y: 0, rot: 0, rail: 7.4 })
+  return { name: titleFor(text, 'Device D1'), form: 'plate', chassis: { w, d, t: 3 }, pcbHeight: 12, devices }
+}
+
+/**
+ * The off-board system for any brief. Rovers use the reference rover, wearables
+ * a wrist band, everything else a mounting plate with the devices the brief asks
+ * for. Never empty: with no matches it falls back to a status display and button.
+ */
+export function systemFromPrompt(text: string): SystemDesign {
+  const picks = devicesForBrief(text)
+  if (VEHICLE.test(text) && !WEARABLE.test(text)) {
+    const roverTags = new Set(defaultSystem.devices.flatMap((d) => byId[d.catalogId]?.tags ?? []).filter((t) => !GENERIC_TAGS.has(t)))
+    const extra = picks.filter((p) => busFor(p) !== 'motor' && !p.tags.some((t) => roverTags.has(t))).slice(0, 2)
+    if (!extra.length) return { ...defaultSystem, name: titleFor(text, defaultSystem.name) }
+    const base = plate(text, extra)
+    return { ...defaultSystem, name: titleFor(text, defaultSystem.name), devices: [...defaultSystem.devices, ...base.devices.filter((d) => d.id !== 'bat').map((d, i) => ({ ...d, port: `J${8 + i}`, x: i % 2 ? 58 : -58, z: 0 }))] }
+  }
+  if (WEARABLE.test(text)) return wearable(text, picks)
+  return plate(text, picks.length ? picks : [byId['ssd1306-096'], byId['tact-6mm']].filter(Boolean))
+}
+
+/** Demo briefs. Each one must produce a working system and board. */
+export const DEMO_BRIEFS: { id: string; label: string; brief: string }[] = [
+  { id: 'wristband', label: 'EMG wristband', brief: 'Design a BLE wristband using EMG muscle sensors for finger gesture control, with haptic feedback.' },
+  { id: 'rover', label: 'Rover', brief: 'Build a 4WD rover with an ultrasonic range finder, IMU, OLED status display and an LED light bar.' },
+  { id: 'weather', label: 'Weather station', brief: 'Make a solar weather station with a BME280 temperature and humidity sensor and an e-paper display over LoRa.' },
+  { id: 'plant', label: 'Plant waterer', brief: 'Create a smart plant watering system with a soil moisture sensor, a pump relay and Wi-Fi alerts.' },
+  { id: 'pulse', label: 'Pulse monitor', brief: 'Build a fingertip heart rate and SpO2 monitor with an OLED display and a buzzer alarm.' },
+]
 
 export const unitPrice = (item: CatalogItem) => item.pricing[0]?.unit ?? 0
 
