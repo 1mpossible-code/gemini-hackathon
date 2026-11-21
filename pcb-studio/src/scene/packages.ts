@@ -358,3 +358,5 @@ export function buildPart(p: Part): THREE.Group {
 export function partHeight(p: Part) {
   return p.kind === 'header' ? 8.4 : bodyFor(p).height
 }
+
+export { b, block, cyl, marking, mesh, topFace }

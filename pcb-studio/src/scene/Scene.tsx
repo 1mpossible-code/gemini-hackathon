@@ -12,13 +12,20 @@ import { getStudio, setStudio, useStudio } from '@/state/studio'
 import { createBoardArtwork } from './boardTexture'
 import { buildPart, partHeight } from './packages'
 import { surfaceMap } from './vendor/surface-maps'
+import { SystemRoot } from './System'
+import { handoff, takeHandoff } from './handoff'
 
 const FLOOR_Y = -3.4
-const FX = new URLSearchParams(location.search).get('fx') !== '0'
+const SYSTEM_FLOOR_Y = -44.2
+export const FX = new URLSearchParams(location.search).get('fx') !== '0'
 
 function Studio() {
   const { gl, scene } = useThree()
   const view = useStudio((s) => s.view)
+  const scale = useStudio((s) => s.scale)
+  const sys = scale === 'system'
+  const floorY = sys ? SYSTEM_FLOOR_Y : FLOOR_Y
+  const ext = sys ? 190 : 75
   useEffect(() => {
     const pmrem = new THREE.PMREMGenerator(gl)
     const env = new RoomEnvironment()
@@ -34,17 +41,18 @@ function Studio() {
     <>
       <hemisphereLight args={[0xeef0f4, 0x26272b, 0.24]} />
       <directionalLight
-        position={[-60, 100, 20]}
+        key={scale}
+        position={sys ? [-150, 260, 60] : [-60, 100, 20]}
         intensity={3.05}
         color={0xfff6ea}
         castShadow
         shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-75}
-        shadow-camera-right={75}
-        shadow-camera-top={65}
-        shadow-camera-bottom={-65}
+        shadow-camera-left={-ext}
+        shadow-camera-right={ext}
+        shadow-camera-top={ext}
+        shadow-camera-bottom={-ext}
         shadow-camera-near={1}
-        shadow-camera-far={260}
+        shadow-camera-far={sys ? 700 : 260}
         shadow-bias={-0.00002}
         shadow-normalBias={0.018}
         shadow-radius={2.2}
@@ -52,17 +60,17 @@ function Studio() {
       <directionalLight position={[65, 48, 35]} intensity={0.58} color={0xdfe6f2} />
       <directionalLight position={[10, 30, -85]} intensity={1.25} />
       <directionalLight position={[-45, -95, -60]} intensity={2.25} visible={back} />
-      <mesh rotation-x={-Math.PI / 2} position-y={FLOOR_Y} receiveShadow visible={!back} userData={{ noExport: true }}>
+      <mesh rotation-x={-Math.PI / 2} position-y={floorY} receiveShadow visible={!back} userData={{ noExport: true }}>
         <planeGeometry args={[2000, 2000]} />
         <meshStandardMaterial color={0x141518} roughness={0.96} />
       </mesh>
-      <gridHelper args={[400, 80, 0x2c2f34, 0x1c1e22]} position-y={FLOOR_Y + 0.02} visible={!back} userData={{ noExport: true }} />
+      <gridHelper args={sys ? [1200, 120, 0x2c2f34, 0x1c1e22] : [400, 80, 0x2c2f34, 0x1c1e22]} position-y={floorY + 0.02} visible={!back} userData={{ noExport: true }} />
     </>
   )
 }
 
 /** Board substrate: rounded outline with holes, top artwork from the netlist. */
-function BoardMesh({ board, traces }: { board: Board; traces: Trace[] }) {
+export function BoardMesh({ board, traces }: { board: Board; traces: Trace[] }) {
   const showTraces = useStudio((s) => s.showTraces)
   const showSilk = useStudio((s) => s.showSilk)
   const artwork = useMemo(() => createBoardArtwork(board, traces, { traces: true, silk: true }), [board, traces])
@@ -141,7 +149,7 @@ function explodeHeight(p: Part) {
   return 7 + partHeight(p) * 0.9 + (p.kind === 'chip' ? 2 : 0)
 }
 
-function Parts({ board }: { board: Board }) {
+export function Parts({ board, passive = false }: { board: Board; passive?: boolean }) {
   const exploded = useStudio((s) => s.exploded)
   const showCallouts = useStudio((s) => s.showCallouts)
   const hovered = useStudio((s) => s.hovered)
@@ -211,12 +219,12 @@ function Parts({ board }: { board: Board }) {
           ref={(g) => { groups.current[i] = g }}
           position={[p.x, board.thickness, p.y]}
           rotation-y={(p.rot * Math.PI) / 180}
-          onPointerOver={over}
-          onPointerOut={out}
-          onClick={click}
+          onPointerOver={passive ? undefined : over}
+          onPointerOut={passive ? undefined : out}
+          onClick={passive ? undefined : click}
         >
           <primitive object={models[i]} />
-          {showCallouts && p.major && (
+          {showCallouts && !passive && p.major && (
             <Html position={[0, partHeight(p) + 1.6, 0]} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
               <div className={`forge-tag ${selected === p.ref ? 'is-active' : ''}`}>
                 <span className="forge-tag-n">{String(majors.indexOf(p.ref) + 1).padStart(2, '0')}</span>
@@ -312,9 +320,12 @@ function CameraRig({ board, root }: { board: Board; root: React.RefObject<THREE.
     c.smoothTime = 0.45
     c.draggingSmoothTime = 0.12
     c.minDistance = 8
-    c.maxDistance = 400
-    // cinematic intro: from straight above, glide down to a 3/4 hero angle
-    c.setLookAt(0, size * 3.2, 0.01, 0, 0, 0, false)
+    c.maxDistance = 600
+    // cinematic intro: continue the system-scale dive if there is one,
+    // otherwise glide from straight above down to a 3/4 hero angle
+    const h = takeHandoff()
+    if (h) c.setLookAt(h.pos.x, h.pos.y, h.pos.z, h.target.x, h.target.y, h.target.z, false)
+    else c.setLookAt(0, size * 3.2, 0.01, 0, 0, 0, false)
     const id = setTimeout(() => {
       c.smoothTime = 1.1
       c.setLookAt(size * 0.85, size * 1.1, size * 1.45, 0, 0, 0, true).then(() => {
@@ -323,6 +334,26 @@ function CameraRig({ board, root }: { board: Board; root: React.RefObject<THREE.
       })
     }, 120)
     return () => clearTimeout(id)
+  }, [size])
+
+  // scroll out past the board → back to the system view, carrying the camera pose
+  useEffect(() => {
+    const c = controls.current
+    if (!c) return
+    let left = false
+    const onUpdate = () => {
+      if (intro.current || left || c.distance < size * 4.2) return
+      left = true
+      const pos = new THREE.Vector3()
+      const target = new THREE.Vector3()
+      c.getPosition(pos)
+      c.getTarget(target)
+      handoff.pos = pos
+      handoff.target = target
+      window.dispatchEvent(new CustomEvent('forge:scale', { detail: 'system' }))
+    }
+    c.addEventListener('update', onUpdate)
+    return () => c.removeEventListener('update', onUpdate)
   }, [size])
 
   useEffect(() => {
@@ -407,7 +438,7 @@ function CameraRig({ board, root }: { board: Board; root: React.RefObject<THREE.
   return <CameraControls ref={controls} makeDefault />
 }
 
-function ExportBridge({ root }: { root: React.RefObject<THREE.Group | null> }) {
+export function ExportBridge({ root }: { root: React.RefObject<THREE.Group | null> }) {
   const req = useStudio((s) => s.exportRequest)
   const { gl, scene, camera } = useThree()
   useEffect(() => {
@@ -439,6 +470,7 @@ function BoardRoot() {
 }
 
 export function PcbScene() {
+  const scale = useStudio((s) => s.scale)
   return (
     <Canvas
       shadows="soft"
@@ -448,7 +480,7 @@ export function PcbScene() {
       onPointerMissed={() => setStudio({ selected: null })}
     >
       <Studio />
-      <BoardRoot />
+      {scale === 'system' ? <SystemRoot /> : <BoardRoot />}
       {FX && (<EffectComposer multisampling={0} enableNormalPass={false}>
         <N8AO aoRadius={2.2} intensity={2.4} distanceFalloff={0.6} quality="medium" halfRes />
         <Bloom intensity={0.25} luminanceThreshold={0.92} mipmapBlur />

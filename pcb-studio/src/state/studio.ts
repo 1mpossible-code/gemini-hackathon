@@ -1,10 +1,16 @@
 import { useSyncExternalStore } from 'react'
 import { board as defaultBoard, type Board } from '@/data/board'
+import { defaultSystem, type SystemDesign } from '@/data/system'
 
 export type ViewMode = '3d' | 'top' | 'bottom'
+export type Scale = 'board' | 'system'
 export type ExportFormat = 'stl' | 'glb' | 'obj' | 'png' | 'json'
 
 export interface StudioState {
+  scale: Scale // 'system' = whole assembly, 'board' = the custom PCB
+  system: SystemDesign
+  device: string | null // selected system device id
+  hoveredDevice: string | null
   board: Board // the board being viewed/edited; AI generation replaces it
   verification: { status: 'idle' | 'running' | 'passed' | 'failed'; theorems: { name: string; statement: string; ok: boolean }[]; log?: string } 
   selected: string | null // part ref, e.g. "U1"
@@ -21,6 +27,10 @@ export interface StudioState {
 }
 
 let state: StudioState = {
+  scale: new URLSearchParams(location.search).get('scale') === 'board' ? 'board' : 'system',
+  system: defaultSystem,
+  device: null,
+  hoveredDevice: null,
   board: defaultBoard,
   verification: { status: 'idle', theorems: [] },
   selected: 'U1',

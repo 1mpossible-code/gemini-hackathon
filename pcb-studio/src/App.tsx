@@ -13,6 +13,8 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Tip, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { ScaleSwitch, ScaleTransition, SystemInspector, SystemLibrary, goScale } from '@/components/SystemPanels'
+import { systemCost } from '@/data/system'
 
 const ease = [0.16, 1, 0.3, 1] as const
 
@@ -35,6 +37,8 @@ function useBoardStats(board: Board) {
 
 function TopBar() {
   const board = useStudio((s) => s.board)
+  const sys = useStudio((s) => s.system)
+  const scale = useStudio((s) => s.scale)
   return (
     <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-3">
       <div className="flex items-center gap-2">
@@ -45,9 +49,18 @@ function TopBar() {
         <span className="label-mono hidden sm:inline">PCB Studio</span>
       </div>
       <ChevronRight className="size-3.5 text-muted-foreground" />
-      <span className="truncate text-sm">{board.name}</span>
+      <button onClick={() => goScale('system')} className={cn('truncate text-sm', scale === 'system' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground')}>{sys.name}</button>
+      <AnimatePresence initial={false}>
+        {scale === 'board' && (
+          <motion.span key="crumb" initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }} transition={{ duration: 0.3, ease }} className="flex min-w-0 items-center gap-3">
+            <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="truncate text-sm">{board.name}</span>
+          </motion.span>
+        )}
+      </AnimatePresence>
       <Badge className="label-mono !text-foreground">Rev {board.revision}</Badge>
-      <div className="ml-auto flex items-center gap-1">
+      <div className="ml-auto flex items-center gap-2">
+        <ScaleSwitch />
         <ExportMenu />
       </div>
     </header>
@@ -159,6 +172,7 @@ function Toolbar() {
   const showCallouts = useStudio((s) => s.showCallouts)
   const touring = useStudio((s) => s.touring)
   const views = ['3d', 'top', 'bottom'] as const
+  const scale = useStudio((s) => s.scale)
   return (
     <motion.div
       initial={{ opacity: 0, y: 16 }}
@@ -185,8 +199,14 @@ function Toolbar() {
           <Expand className="size-3.5" /> Explode
         </Button>
       </Tip>
-      <Tip label="Fit board (F)">
+      <Tip label={scale === 'system' ? 'Fit system (F)' : 'Fit board (F)'}>
         <Button size="sm" variant="ghost" onClick={requestFit}><Maximize className="size-3.5" /> Fit</Button>
+      </Tip>
+      <div className="mx-1 h-5 w-px bg-border" />
+      <Tip label={scale === 'system' ? 'Zoom out to system / into board' : 'Back to system'}>
+        <Button size="sm" variant="ghost" onClick={() => goScale(scale === 'system' ? 'board' : 'system')}>
+          <Boxes className="size-3.5" /> {scale === 'system' ? 'Board' : 'System'}
+        </Button>
       </Tip>
       <div className="mx-1 h-5 w-px bg-border" />
       <Tip label="Copper traces">
@@ -433,29 +453,35 @@ type Studio = ReturnType<typeof getStudio>
 
 function StatusBar() {
   const board = useStudio((s) => s.board)
+  const sys = useStudio((s) => s.system)
+  const scale = useStudio((s) => s.scale)
+  const hoveredDevice = useStudio((s) => s.hoveredDevice)
   const hovered = useStudio((s) => s.hovered)
   const stats = useBoardStats(board)
   const v = useStudio((s) => s.verification)
   return (
     <footer className="label-mono flex h-7 shrink-0 items-center gap-4 border-t border-border px-3 !text-[10px]">
       <span className="flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-foreground" /> Ready</span>
-      <span className="tabular">{board.parts.length} parts</span>
+      <span>{scale === 'system' ? 'System' : 'Board'}</span>
+      <span className="tabular">{scale === 'system' ? `${sys.devices.length} devices` : `${board.parts.length} parts`}</span>
       <span className="tabular">{board.nets.length} nets</span>
-      <span className="tabular">BOM ${stats.cost.toFixed(2)}</span>
+      <span className="tabular">BOM ${(stats.cost + (scale === 'system' ? systemCost(sys) : 0)).toFixed(2)}</span>
       <span>{v.status === 'passed' ? 'Proofs ✓' : v.status === 'failed' ? 'Proofs ✗' : 'Unverified'}</span>
-      <span className="ml-auto flex items-center gap-1.5"><Cpu className="size-3" /> {hovered ?? 'Hover a part'}</span>
+      <span className="ml-auto flex items-center gap-1.5"><Cpu className="size-3" /> {scale === 'system' ? hoveredDevice ?? 'Hover a device · scroll into the PCB' : hovered ?? 'Hover a part'}</span>
     </footer>
   )
 }
 
 export default function App() {
+  const scale = useStudio((s) => s.scale)
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === 'INPUT') return
       if (e.key === 'e') setStudio((s) => ({ exploded: !s.exploded, touring: false }))
       if (e.key === 't') setStudio((s) => ({ touring: !s.touring }))
       if (e.key === 'f') { setStudio({ touring: false }); requestFit() }
-      if (e.key === 'Escape') setStudio({ selected: null, touring: false })
+      if (e.key === 'Escape') setStudio({ selected: null, device: null, touring: false })
+      if (e.key === 'z') goScale(getStudio().scale === 'system' ? 'board' : 'system')
     }
     window.addEventListener('keydown', on)
     return () => window.removeEventListener('keydown', on)
@@ -465,7 +491,7 @@ export default function App() {
       <div className="flex h-dvh flex-col bg-background text-foreground">
         <TopBar />
         <div className="flex min-h-0 flex-1">
-          <Library />
+          {scale === 'system' ? <SystemLibrary /> : <Library />}
           <motion.main
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -475,8 +501,9 @@ export default function App() {
             <PcbScene />
             <Prompt />
             <Toolbar />
+            <ScaleTransition />
           </motion.main>
-          <Inspector />
+          {scale === 'system' ? <SystemInspector /> : <Inspector />}
         </div>
         <StatusBar />
       </div>
