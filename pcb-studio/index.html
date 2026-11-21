@@ -13,5 +13,10 @@
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
+    <script type="module">
+      if (import.meta.hot) {
+        import.meta.hot.on('vite:error', () => setTimeout(() => location.reload(), 250))
+      }
+    </script>
   </body>
 </html>

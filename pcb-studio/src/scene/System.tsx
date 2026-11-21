@@ -7,7 +7,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { CameraControls } from '@react-three/drei'
 import { byId } from '@/data/catalog'
 import type { Board } from '@/data/board'
-import type { Bus, SystemDesign, SystemDevice } from '@/data/system'
+import { BUS_COLOR, type SystemDesign, type SystemDevice } from '@/data/system'
 import { routeNets } from '@/pcb/footprint'
 import { getStudio, setStudio, useStudio } from '@/state/studio'
 import { buildDevice } from './devices'
@@ -15,14 +15,6 @@ import { partHeight } from './packages'
 import { BoardMesh, ExportBridge, Parts } from './Scene'
 import { handoff, takeHandoff } from './handoff'
 import { ProjectedLabel } from './ProjectedLabel'
-
-export const BUS_COLOR: Record<Bus, string> = {
-  power: '#d9564f',
-  motor: '#d6a23a',
-  i2c: '#5b8def',
-  gpio: '#9aa4b2',
-  data: '#e2e6ec',
-}
 
 const anodized = new THREE.MeshPhysicalMaterial({ color: 0x24272b, roughness: 0.42, metalness: 0.75, clearcoat: 0.2 })
 const holeMat = new THREE.MeshStandardMaterial({ color: 0x0b0c0e, roughness: 0.9 })

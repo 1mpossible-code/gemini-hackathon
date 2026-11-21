@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import {
   AlertTriangle, Box, Boxes, Cable, Check, CheckCircle2, ChevronRight, CircuitBoard, Cpu,
@@ -9,7 +9,7 @@ import {
 import { PcbScene } from '@/scene/Scene'
 import {
   commitBoardEdit, commitSystemSwap, computeBoardBomCost, computeSystemDevicesCost,
-  beginDesignRequest, cycleLabelMode, getStudio, loadExampleBoard, requestExport, requestFit, setStudio, undoLastEdit, useStudio,
+  beginDesignRequest, cycleLabelMode, getStudio, goScale, loadExampleBoard, requestExport, requestFit, setStudio, undoLastEdit, useStudio,
   type ExportFormat, type ShopOffer, type ShopSearchEntry,
 } from '@/state/studio'
 import { board as roverBoard, type Board, type Part } from '@/data/board'
@@ -25,7 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tip, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { ResearchPane } from '@/components/Research'
-import { ScaleSwitch, ScaleTransition, SystemInspector, SystemLibrary, goScale } from '@/components/SystemPanels'
+import { ScaleSwitch, ScaleTransition, SystemInspector, SystemLibrary } from '@/components/SystemPanels'
 
 const ease = [0.16, 1, 0.3, 1] as const
 const usd = (n: number) => `$${n.toFixed(2)}`
@@ -605,6 +605,7 @@ function CopilotBar() {
   const v = useStudio((s) => s.verification)
   const leftOpen = useStudio((s) => s.leftPanelOpen)
   const pending = useStudio((s) => s.pendingPrompt)
+  const started = useRef<string | null>(null)
 
   const [promptOpen, setPromptOpen] = useState(false)
   const [explainText, setExplainText] = useState<string | null>(null)
@@ -674,10 +675,11 @@ function CopilotBar() {
   }
 
   useEffect(() => {
-    if (!pending || busy) return
+    if (!pending || busy || started.current === pending) return
+    started.current = pending
     setStudio({ pendingPrompt: null })
     setText(pending)
-    runGenerate(pending)
+    void runGenerate(pending).finally(() => { started.current = null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending])
 
@@ -1480,10 +1482,11 @@ export default function App() {
 
   return (
     <TooltipProvider delayDuration={250}>
+      <ResearchPane />
+      {mode === 'engineer' && (
       <div className="flex h-dvh flex-col bg-background text-foreground">
         <TopBar />
         <div className="relative flex min-h-0 flex-1">
-          <ResearchPane />
           {mode === 'engineer' && (
             <>
               {scale === 'system' ? <SystemLibrary /> : <Library />}
@@ -1510,6 +1513,7 @@ export default function App() {
         </div>
         <StatusBar />
       </div>
+      )}
     </TooltipProvider>
   )
 }

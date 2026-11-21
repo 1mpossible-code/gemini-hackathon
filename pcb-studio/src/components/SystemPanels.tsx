@@ -10,14 +10,13 @@ import {
 } from 'lucide-react'
 import { byId } from '@/data/catalog'
 import {
-  alternativesFor, analyzeDevice, analyzeSystem, modelFidelity, unitPrice,
+  alternativesFor, analyzeDevice, analyzeSystem, BUS_COLOR, modelFidelity, unitPrice,
   type CheckSeverity, type SystemDevice,
 } from '@/data/system'
 import {
   commitSystemSwap, computeBoardBomCost, computeSystemDevicesCost, getStudio, setStudio,
-  useStudio, type Scale, type ShopSearchEntry,
+  useStudio, goScale, type Scale, type ShopSearchEntry,
 } from '@/state/studio'
-import { BUS_COLOR } from '@/scene/System'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -26,15 +25,6 @@ import { cn } from '@/lib/utils'
 
 const ease = [0.16, 1, 0.3, 1] as const
 const usd = (n: number) => `$${n.toFixed(2)}`
-
-/** Ask for a scale change; the 3D views animate the camera, the veil swaps the scene. */
-export function goScale(scale: Scale) {
-  const s = getStudio()
-  if (s.mode !== 'engineer') return setStudio({ mode: 'engineer', scale })
-  if (s.scale === scale) return
-  if (scale === 'board') window.dispatchEvent(new Event('forge:dive'))
-  else window.dispatchEvent(new CustomEvent('forge:scale', { detail: 'system' }))
-}
 
 export function ScaleSwitch() {
   const scale = useStudio((s) => s.scale)

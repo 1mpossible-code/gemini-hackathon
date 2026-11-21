@@ -524,9 +524,8 @@ def verify_clearance(
     max_sensor_top = max(bounds[s][1] for s in sensors)
     if bounds["board"][0] - max_sensor_top < gap - tolerance:
         raise GeometryError("The board and sensor proxies overlap their clearance zones.")
-    if len(sensors) == 2:
-        if x_spans[sensors[1]][0] - x_spans[sensors[0]][1] < gap - tolerance:
-            raise GeometryError("Dual EMG sensor proxies overlap laterally.")
+    if len(sensors) == 2 and x_spans[sensors[1]][0] - x_spans[sensors[0]][1] < gap - tolerance:
+        raise GeometryError("Dual EMG sensor proxies overlap laterally.")
 
 
 def export_glb(manifest: AssemblyManifest) -> bytes:

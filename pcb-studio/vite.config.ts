@@ -15,10 +15,27 @@ export default defineConfig({
   // Research tab under /research; its own /api and /static paths are forwarded too.
   // /api/generate and /api/verify are served by the plugins above and never reach it.
   server: {
+    headers: { 'Cache-Control': 'no-store' },
+    // Poll so edits from another process show up even when inotify misses them.
+    watch: { usePolling: true, interval: 300 },
     proxy: {
-      '/research': { target: RESEARCH, rewrite: (p) => p.replace(/^\/research/, '') || '/' },
-      '/static': RESEARCH,
-      '/api': RESEARCH,
+      '/research': {
+        target: RESEARCH,
+        rewrite: (p) => p.replace(/^\/research/, '') || '/',
+        timeout: 0,
+        proxyTimeout: 0,
+      },
+      '/static': { target: RESEARCH, timeout: 0, proxyTimeout: 0 },
+      // PCB routes stay on this dev server. Everything else under /api is the research studio.
+      '/api': {
+        target: RESEARCH,
+        timeout: 0,
+        proxyTimeout: 0,
+        bypass(req) {
+          const url = req.url ?? ''
+          if (/^\/api\/(generate|verify|repair|shop)(\/|$|\?)/.test(url)) return url
+        },
+      },
     },
   },
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },

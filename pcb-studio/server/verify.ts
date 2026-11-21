@@ -9,9 +9,9 @@ import { existsSync } from 'node:fs'
 import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
-import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
 import type { Certificate, Verification } from '../src/verify/types.ts'
+import { readBody, sendJson as send } from './http.ts'
 
 export interface VerifyOptions {
   /** the lake project directory (default: <root>/verify) */
@@ -117,24 +117,6 @@ async function buildIsolatedCertificate(cert: Certificate, projectDir: string, t
     diagnostics: parseDiagnostics(out),
     assumptions: cert.assumptions,
   }
-}
-
-function readBody(req: IncomingMessage): Promise<string> {
-  return new Promise((resolve, reject) => {
-    let s = ''
-    req.on('data', (c) => {
-      s += c
-      if (s.length > 5_000_000) reject(new Error('body too large'))
-    })
-    req.on('end', () => resolve(s))
-    req.on('error', reject)
-  })
-}
-
-function send(res: ServerResponse, status: number, body: unknown) {
-  res.statusCode = status
-  res.setHeader('content-type', 'application/json')
-  res.end(JSON.stringify(body))
 }
 
 export function verifyPlugin(opts: VerifyOptions = {}): Plugin {

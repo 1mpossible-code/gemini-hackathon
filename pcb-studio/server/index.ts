@@ -2,6 +2,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { join, resolve } from 'node:path'
 import { loadEnv, runnerImport, type Plugin } from 'vite'
 import { callGemini, MODELS, resolveApiKey, type GeminiUsage } from './gemini.ts'
+import { readJson, sendJson } from './http.ts'
 
 /**
  * Vite dev + preview middleware for AI board generation.
@@ -34,38 +35,7 @@ interface PipelineModule {
 }
 
 const PIPELINE = '/src/ai/pipeline.ts'
-const MAX_BODY = 32 * 1024
 const MAX_CONCURRENT = 3
-
-function readJson(req: IncomingMessage): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    let size = 0
-    const chunks: Buffer[] = []
-    req.on('data', (c: Buffer) => {
-      size += c.length
-      if (size > MAX_BODY) {
-        reject(new Error('request body too large'))
-        req.destroy()
-        return
-      }
-      chunks.push(c)
-    })
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'))
-      } catch {
-        reject(new Error('invalid JSON body'))
-      }
-    })
-    req.on('error', reject)
-  })
-}
-
-function sendJson(res: ServerResponse, status: number, body: unknown) {
-  res.statusCode = status
-  res.setHeader('content-type', 'application/json')
-  res.end(JSON.stringify(body))
-}
 
 export function forgeAi(): Plugin {
   let env: Record<string, string | undefined> = process.env

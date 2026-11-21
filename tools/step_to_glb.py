@@ -533,7 +533,7 @@ def read_glb(path: Path) -> tuple[dict[str, Any], bytes]:
     data = path.read_bytes()
     if len(data) < 20 or data[:4] != GLTF_MAGIC:
         raise SystemExit(f"{path} is not a GLB file.")
-    magic, version, length = struct.unpack_from("<4sII", data, 0)
+    _magic, version, length = struct.unpack_from("<4sII", data, 0)
     if version != 2 or length != len(data):
         raise SystemExit(f"{path} has GLB version {version} and declared length {length}.")
     offset = 12

@@ -1,0 +1,16 @@
+{
+  "ready_ms_including_2500ms_settle": 2907,
+  "transition_ms_including_850ms_wait": [
+    5597,
+    2234,
+    5347,
+    1927,
+    5146,
+    2744,
+    4942,
+    1851
+  ],
+  "raf_mean_ms": 16.67,
+  "raf_p95_ms": 16.8,
+  "page_errors": []
+}

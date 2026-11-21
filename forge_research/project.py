@@ -24,7 +24,6 @@ from .models import (
     CostBreakdown,
     DeviceSpecification,
     Part,
-    PartProcurementResult,
     ProcurementState,
     Requirements,
     ResearchReport,

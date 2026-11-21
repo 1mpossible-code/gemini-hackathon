@@ -233,10 +233,9 @@ def apply_repair_patch(
                 f"Repair proposed unknown or non-controller part '{patch.controller_id}'."
             )
         for comp in updated.components:
-            if comp.role == "controller":
-                if comp.catalog_id != new_ctrl.id:
-                    comp.catalog_id = new_ctrl.id
-                    comp.selected_offer_id = None
+            if comp.role == "controller" and comp.catalog_id != new_ctrl.id:
+                comp.catalog_id = new_ctrl.id
+                comp.selected_offer_id = None
         updated.parts_by_instance["board"] = new_ctrl
 
     new_rail = (

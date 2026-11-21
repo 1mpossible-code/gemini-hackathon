@@ -4,40 +4,8 @@ import { loadEnv, runnerImport, type Plugin } from 'vite'
 import { callGemini, resolveApiKey } from './gemini.ts'
 import { verifyCertificate } from './verify.ts'
 import type { Certificate } from '../src/verify/types.ts'
-
-interface BoardPart {
-  ref: string
-  kind: string
-  name: string
-  mpn: string
-  x: number
-  y: number
-  rot: number
-  pins?: number
-  size?: '0603' | '0805'
-  [k: string]: unknown
-}
-
-interface BoardNet {
-  name: string
-  path: string[]
-  width?: number
-  layer?: 'top' | 'bottom'
-  via?: [number, number][]
-}
-
-interface BoardData {
-  name: string
-  revision: string
-  width: number
-  height: number
-  thickness: number
-  cornerRadius: number
-  holes: { x: number; y: number; d: number }[]
-  parts: BoardPart[]
-  nets: BoardNet[]
-  groundVias: [number, number][]
-}
+import type { Board as BoardData, Net as BoardNet } from '../src/data/board.ts'
+import { readJson, sendJson } from './http.ts'
 
 interface FootprintMod {
   bodyFor(p: unknown): { w: number; h: number; height: number }
@@ -76,36 +44,6 @@ const REPAIR_SCHEMA = {
     rationale: { type: 'STRING', description: 'concise engineering explanation of how the failed Lean constraints were fixed' },
   },
   required: ['rationale'],
-}
-
-function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = []
-    let size = 0
-    req.on('data', (c: Buffer) => {
-      size += c.length
-      if (size > 2 * 1024 * 1024) {
-        reject(new Error('body too large'))
-        req.destroy()
-        return
-      }
-      chunks.push(c)
-    })
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as Record<string, unknown>)
-      } catch {
-        reject(new Error('invalid JSON'))
-      }
-    })
-    req.on('error', reject)
-  })
-}
-
-function sendJson(res: ServerResponse, status: number, body: unknown) {
-  res.statusCode = status
-  res.setHeader('content-type', 'application/json')
-  res.end(JSON.stringify(body))
 }
 
 function segDistSq(a: [number, number], b: [number, number], c: [number, number], d: [number, number]): number {

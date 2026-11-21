@@ -1,0 +1,53 @@
+DEMO_ORIGINAL {
+  status: 'failed',
+  passed: '13/15',
+  failed: [ 'trace_clearance', 'all_rules' ],
+  durationMs: 2667,
+  sha256: 'c40dc4d44fc6941c280ea05f2b4ac1533511df50c6739badff5a0112102a25ef',
+  violations: [
+    'trace_clearance|1 same-layer segment pairs of different nets closer than 127µm edge-to-edge (first 20 follow)',
+    'trace_clearance|VBUS (10000,-6145)µm-(13300,-9445)µm vs U0TXD (13300,-8175)µm-(9565,-8175)µm (Forge.Layer.top)'
+  ]
+}
+DEMO_REPAIRED_HYDROGEN_1 {
+  actor: 'gemini',
+  repaired: true,
+  deterministicAdjustments: 0,
+  revision: 'A1 -> A2',
+  gemini: {
+    model: 'gemini-4-hydrogen',
+    latencyMs: 3439,
+    promptChars: 1107,
+    promptTokens: 1000,
+    outputTokens: 96,
+    error: null
+  },
+  repairPassed: '15/15',
+  repairVerifyMs: 1307,
+  independentPassed: '15/15',
+  independentVerifyMs: 1286,
+  certificateSha256: 'a56dae360bab5e2806ee18756430a8cb972a2998984912774ca26e965b6dcdf9',
+  rationale: 'Move U0TXD (index 8) to the bottom layer to eliminate the same-layer trace_clearance violation with VBUS (index 5) on the top layer.',
+  changedNets: [ { index: 8, before: [Object], after: [Object] } ]
+}
+DEMO_REPAIRED_HYDROGEN_2 {
+  actor: 'gemini',
+  repaired: true,
+  deterministicAdjustments: 0,
+  revision: 'A1 -> A2',
+  gemini: {
+    model: 'gemini-4-hydrogen',
+    latencyMs: 2614,
+    promptChars: 1107,
+    promptTokens: 1000,
+    outputTokens: 68,
+    error: null
+  },
+  repairPassed: '15/15',
+  repairVerifyMs: 1404,
+  independentPassed: '15/15',
+  independentVerifyMs: 1296,
+  certificateSha256: 'a56dae360bab5e2806ee18756430a8cb972a2998984912774ca26e965b6dcdf9',
+  rationale: 'Move U0TXD (net 8) to the bottom layer to eliminate the same-layer trace clearance violation with VBUS (net 5) on the top layer.',
+  changedNets: [ { index: 8, before: [Object], after: [Object] } ]
+}

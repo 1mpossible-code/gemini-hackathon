@@ -272,6 +272,15 @@ function devBoard(g: THREE.Group, item: CatalogItem) {
     b(g, 12, 11, 16, -w / 2 + 6, t + 5.5, -h / 2 + 12, materials.silver, 0.4)
     b(g, 9, 11, 14, -w / 2 + 4.5, t + 5.5, h / 2 - 9, materials.plastic, 0.6)
   }
+  if (id === 'kb2040') {
+    b(g, 4, 2.8, 6, w / 2 - 2, t + 1.4, 0, materials.plastic, 0.2) // STEMMA QT
+    b(g, 2.8, 1.5, 3.8, -4, t + 0.75, -5, materials.plastic, 0.1) // Reset button
+    b(g, 2.8, 1.5, 3.8, -4, t + 0.75, 5, materials.plastic, 0.1) // Boot button
+  }
+  if (id === 'feather-rp2040') {
+    b(g, 6, 6, 7, -w / 2 + 12, t + 3, h / 2 - 4.5, materials.plastic, 0.3) // JST LiPo connector
+    b(g, 2.8, 1.5, 3.8, -w / 2 + 18, t + 0.75, -h / 2 + 4, materials.plastic, 0.1) // Reset button
+  }
   b(g, 3.2, 1.2, 1.6, -w / 2 + 12, t + 0.6, h / 2 - 5, materials.ledLens, 0.1)
   smalls(g, w, h, t, seedOf(id))
 }

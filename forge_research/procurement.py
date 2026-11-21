@@ -26,9 +26,12 @@ CLIENT_INFO = {"name": "forge-engineering-studio", "version": "0.2.0"}
 
 ShopTransport = Callable[[str, dict[str, str], bytes], tuple[int, dict[str, Any]]]
 
-_PACK_RE = re.compile(r"\b(\d+\s*-\s*pack|\d+\s*pcs|\d+\s*pack|kit|bundle|starter)\b", re.I)
+_PACK_RE = re.compile(
+    r"\b(\d+\s*-\s*pack|\d+\s*pcs|\d+\s*pack|kit|bundle|starter)\b", re.IGNORECASE
+)
 _ACCESSORY_RE = re.compile(
-    r"\b(shield|cable|case|enclosure|cover|strap|hat|adapter|mount|electrode)\b", re.I
+    r"\b(shield|cable|case|enclosure|cover|strap|hat|adapter|mount|electrode)\b",
+    re.IGNORECASE,
 )
 
 
@@ -97,7 +100,7 @@ def call_shop_tool_sync(
         SHOP_MCP_ENDPOINT, headers, json.dumps(body).encode("utf-8")
     )
 
-    if "error" in data and data["error"]:
+    if data.get("error"):
         err = data["error"]
         msg = err.get("message") or f"Shop MCP rejected {tool_name} (HTTP {status})."
         raise ShopMcpError(str(msg), code=str(err.get("code", "rpc_error")))

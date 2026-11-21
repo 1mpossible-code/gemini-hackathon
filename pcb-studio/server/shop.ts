@@ -1,5 +1,9 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
+import { readJson, sendJson } from './http.ts'
+import type { OfferMatchKind, ShopOffer, ShopSearchResponse } from '../src/data/shop.ts'
+
+export type { OfferMatchKind, ShopOffer, ShopSearchResponse }
 
 const SHOP_MCP_URL = 'https://mcp.shop.com/'
 const PROTOCOL_VERSION = '2026-07-28'
@@ -9,35 +13,6 @@ const MINOR_EXPONENTS: Record<string, number> = {
   BIF: 0, CLP: 0, DJF: 0, GNF: 0, ISK: 0, JPY: 0, KMF: 0, KRW: 0,
   PYG: 0, RWF: 0, UGX: 0, VND: 0, VUV: 0, XAF: 0, XOF: 0, XPF: 0,
   BHD: 3, IQD: 3, JOD: 3, KWD: 3, LYD: 3, OMR: 3, TND: 3,
-}
-
-export type OfferMatchKind = 'exact_match' | 'bundle_or_pack' | 'variant_or_accessory'
-
-export interface ShopOffer {
-  offerId: string
-  productId: string
-  variantId: string
-  title: string
-  sellerName: string
-  sellerDomain: string
-  priceMinor: number
-  currency: string
-  formattedPrice: string
-  priceUsd: number | null
-  available: boolean
-  url: string
-  matchKind: OfferMatchKind
-  matchNote: string
-}
-
-export interface ShopSearchResponse {
-  mpn: string
-  query: string
-  status: 'ok' | 'no_results' | 'error'
-  offers: ShopOffer[]
-  warnings: string[]
-  error?: string
-  retrievedAt: string
 }
 
 function formatMinor(amount: number, currency: string): string {
@@ -54,36 +29,6 @@ function formatMinor(amount: number, currency: string): string {
   } catch {
     return `${cur} ${val.toFixed(exp)}`
   }
-}
-
-function readJson(req: IncomingMessage): Promise<Record<string, unknown>> {
-  return new Promise((resolve, reject) => {
-    const chunks: Buffer[] = []
-    let len = 0
-    req.on('data', (c: Buffer) => {
-      len += c.length
-      if (len > 64 * 1024) {
-        reject(new Error('request body too large'))
-        req.destroy()
-        return
-      }
-      chunks.push(c)
-    })
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}') as Record<string, unknown>)
-      } catch {
-        reject(new Error('invalid JSON'))
-      }
-    })
-    req.on('error', reject)
-  })
-}
-
-function sendJson(res: ServerResponse, status: number, body: unknown) {
-  res.statusCode = status
-  res.setHeader('content-type', 'application/json')
-  res.end(JSON.stringify(body))
 }
 
 async function callShopMcp(toolName: string, args: Record<string, unknown>): Promise<Record<string, unknown>> {
