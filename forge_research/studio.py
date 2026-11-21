@@ -68,6 +68,75 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="FORGE Studio", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=WEB), name="static")
 
+# Browsers were keeping the last HTML/JS (304s) after this process died, so the
+# page stayed on an old UI while Gemini kept editing the files. Never store a
+# response, and reload the open tab when anything under web/ changes.
+_DROP_HEADERS = {b"cache-control", b"etag", b"last-modified", b"expires", b"pragma"}
+_NO_CACHE = (
+    (b"cache-control", b"no-store, max-age=0, must-revalidate"),
+    (b"pragma", b"no-cache"),
+    (b"expires", b"0"),
+)
+_LIVE = (
+    b'<script id="forge-live">(function(){var rev=null;async function tick(){'
+    b'try{var r=await fetch("/api/assets-rev",{cache:"no-store"});if(!r.ok)return;'
+    b"var j=await r.json();if(rev!==null&&j.rev!==rev)location.reload();rev=j.rev;}"
+    b"catch(e){}setTimeout(tick,1000);}tick();})();</script>"
+)
+
+
+class AlwaysFresh:
+    def __init__(self, asgi):
+        self.asgi = asgi
+
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") != "http":
+            await self.asgi(scope, receive, send)
+            return
+        path = scope.get("path", "")
+        inject = scope.get("method") == "GET" and path in ("/", "/index.html")
+        if not inject:
+            async def send_headers(message):
+                if message["type"] == "http.response.start":
+                    headers = [(k, v) for k, v in message.get("headers", []) if k.lower() not in _DROP_HEADERS]
+                    headers.extend(_NO_CACHE)
+                    message = {**message, "headers": headers}
+                await send(message)
+
+            await self.asgi(scope, receive, send_headers)
+            return
+
+        started: dict[str, Any] = {}
+        chunks: list[bytes] = []
+
+        async def capture(message):
+            if message["type"] == "http.response.start":
+                started.update(message)
+                return
+            if message["type"] != "http.response.body":
+                await send(message)
+                return
+            chunks.append(message.get("body") or b"")
+            if message.get("more_body", False):
+                return
+            body = b"".join(chunks)
+            if b"forge-live" not in body and b"</body>" in body:
+                body = body.replace(b"</body>", _LIVE + b"</body>", 1)
+            headers = [
+                (k, v)
+                for k, v in started.get("headers", [])
+                if k.lower() not in _DROP_HEADERS | {b"content-length"}
+            ]
+            headers.extend(_NO_CACHE)
+            headers.append((b"content-length", str(len(body)).encode()))
+            await send({**started, "type": "http.response.start", "headers": headers})
+            await send({"type": "http.response.body", "body": body})
+
+        await self.asgi(scope, receive, capture)
+
+
+app.add_middleware(AlwaysFresh)
+
 
 class ResearchRequest(BaseModel):
     mode: Literal["live", "sample"]
@@ -352,6 +421,15 @@ def home() -> FileResponse:
     return FileResponse(WEB / "index.html")
 
 
+@app.get("/api/assets-rev")
+def assets_rev() -> dict[str, str]:
+    latest = 0
+    for path in WEB.rglob("*"):
+        if path.is_file():
+            latest = max(latest, path.stat().st_mtime_ns)
+    return {"rev": str(latest)}
+
+
 @app.get("/api/session")
 def session() -> dict[str, Any]:
     model = configured_model()
@@ -361,6 +439,7 @@ def session() -> dict[str, Any]:
         "lean_available": find_lean_binary() is not None,
         "shop_mcp_enabled": True,
         "sample_brief": DEMO_BRIEF,
+        "pcb_url": os.environ.get("FORGE_PCB_URL", "http://127.0.0.1:5173/"),
     }
 
 
@@ -877,4 +956,9 @@ async def select_procurement_offer(
 if __name__ == "__main__":
     os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = "false"
     os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "false"
-    uvicorn.run(app, host="127.0.0.1", port=int(os.getenv("FORGE_PORT", "8000")))
+    uvicorn.run(
+        "forge_research.studio:app",
+        host="127.0.0.1",
+        port=int(os.getenv("FORGE_PORT", "8000")),
+        reload=True,
+    )

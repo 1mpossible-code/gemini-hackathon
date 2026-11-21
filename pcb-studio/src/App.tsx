@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import {
   Box, Boxes, Check, ChevronRight, CircuitBoard, Cpu, Download, Expand, ExternalLink, FileJson,
@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { PcbScene } from '@/scene/Scene'
 import {
-  commitBoardEdit, computeBoardBomCost, getStudio, requestExport, requestFit, setStudio,
+  commitBoardEdit, computeBoardBomCost, getStudio, goScale, requestExport, requestFit, setStudio,
   undoBoardEdit, useStudio, type ExportFormat, type ShopOffer, type ShopSearchEntry,
 } from '@/state/studio'
 import type { Board, Part } from '@/data/board'
@@ -20,7 +20,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tip, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { ResearchPane } from '@/components/Research'
-import { ScaleSwitch, ScaleTransition, SystemInspector, SystemLibrary, goScale } from '@/components/SystemPanels'
+import { ScaleSwitch, ScaleTransition, SystemInspector, SystemLibrary } from '@/components/SystemPanels'
 import { systemCost } from '@/data/system'
 
 const ease = [0.16, 1, 0.3, 1] as const
@@ -257,11 +257,14 @@ function Prompt() {
   const [log, setLog] = useState<GenLog[]>([])
   const [error, setError] = useState<string | null>(null)
   const pending = useStudio((s) => s.pendingPrompt)
+  const started = useRef<string | null>(null)
   useEffect(() => {
-    if (!pending || busy) return
+    // StrictMode runs this effect twice; the ref stops a second generation of the same brief.
+    if (!pending || busy || started.current === pending) return
+    started.current = pending
     setStudio({ pendingPrompt: null })
     setText(pending)
-    run(pending)
+    void run(pending).finally(() => { started.current = null })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pending])
   const run = async (override?: string) => {
@@ -896,11 +899,11 @@ export default function App() {
   }, [])
   return (
     <TooltipProvider delayDuration={250}>
+      <ResearchPane />
+      {mode === 'engineer' && (
       <div className="flex h-dvh flex-col bg-background text-foreground">
         <TopBar />
         <div className="relative flex min-h-0 flex-1">
-          <ResearchPane />
-          {mode === 'engineer' && (<>
           {scale === 'system' ? <SystemLibrary /> : <Library />}
           <motion.main
             initial={{ opacity: 0 }}
@@ -914,10 +917,10 @@ export default function App() {
             <ScaleTransition />
           </motion.main>
           {scale === 'system' ? <SystemInspector /> : <Inspector />}
-          </>)}
         </div>
         <StatusBar />
       </div>
+      )}
     </TooltipProvider>
   )
 }

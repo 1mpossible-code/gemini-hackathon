@@ -49,7 +49,7 @@ function showBriefScreen() {
   $("#workbench-view").hidden = true;
   $("#engineering-statusbar").hidden = true;
   $("#Capabilities-pill").hidden = false;
-  $("#nav-context").textContent = "New Design Brief";
+  $("#nav-context").textContent = "New brief";
   brief.focus();
 }
 
@@ -142,11 +142,15 @@ async function startResearch(mode) {
       applyResearchEvent
     );
     latestCompletedReport = report;
-    finishResearchMap("completed");
+    finishResearchMap("completed", "", report);
     const canEngineer = !!(report.review?.selected_parts || []).length;
     $("#engineer-pcb-btn").hidden = !canEngineer;
     $("#btn-engineer-pcb").hidden = !canEngineer;
-    if (report.project) {
+    if (canEngineer) {
+      // Research is done: hand the chosen parts to the PCB studio.
+      if (report.project) $("#open-workbench-btn").hidden = false;
+      setTimeout(engineerPcb, 2500);
+    } else if (report.project) {
       $("#open-workbench-btn").hidden = false;
       await loadProjectIntoWorkbench(report.project, report);
     } else {
@@ -169,8 +173,11 @@ async function startResearch(mode) {
 }
 
 // Hand the finished research run to the PCB studio, which generates a board for it.
-// Inside the studio's Research tab this posts to the parent window; standalone it
-// opens the studio (FORGE_PCB_URL, default the Vite dev server).
+// Inside the PCB studio's Research tab this posts to the parent window; standalone it
+// navigates to the studio (FORGE_PCB_URL from /api/session).
+// Served under /research/ by the PCB studio: the studio is this origin's root.
+const sameOriginStudio = location.pathname.startsWith("/research");
+let pcbUrl = sameOriginStudio ? `${location.origin}/` : "http://127.0.0.1:5173/";
 function engineerPcb() {
   const report = latestCompletedReport;
   if (!report) return;
@@ -179,12 +186,12 @@ function engineerPcb() {
   }));
   const message = { type: "forge:engineer", brief: report.brief, parts };
   if (window.parent !== window) {
-    window.parent.postMessage(message, "*");
+    window.parent.postMessage(message, location.origin);
   } else {
-    const url = new URL(window.FORGE_PCB_URL || "http://127.0.0.1:5173/");
+    const url = new URL(pcbUrl);
     url.searchParams.set("brief", report.brief);
     url.searchParams.set("parts", parts.map(p => p.name).join(", "));
-    window.open(url, "_blank", "noopener");
+    location.assign(url);
   }
 }
 $("#engineer-pcb-btn").addEventListener("click", engineerPcb);
@@ -241,6 +248,7 @@ tightExampleButton.addEventListener("click", () => {
   brief.focus();
 });
 sampleButton.addEventListener("click", () => startResearch("sample"));
+if (new URLSearchParams(location.search).get("run") === "sample") startResearch("sample");
 
 bindWorkbenchEvents(
   () => showBriefScreen(),
@@ -259,12 +267,13 @@ Promise.all([
   .then(([sess, cat]) => {
     if (cat?.parts) setCatalogParts(cat.parts);
     if (sess) {
+      if (sess.pcb_url && !sameOriginStudio) pcbUrl = sess.pcb_url;
       connection.dataset.live = String(sess.live);
       connection.lastElementChild.textContent = sess.live
         ? `Gemini live (${sess.gemini_model})`
-        : "Offline fixture mode";
+        : "Gemini offline";
       leanBadge.dataset.ready = String(sess.lean_available);
-      leanBadge.textContent = sess.lean_available ? "Lean 4: ready" : "Lean 4: unavailable";
+      leanBadge.textContent = sess.lean_available ? "Lean 4 ready" : "Lean 4 unavailable";
       setLiveGeminiStatus(sess.live);
       if (sess.sample_brief) sampleBrief = sess.sample_brief;
     }

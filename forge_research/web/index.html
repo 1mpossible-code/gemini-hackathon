@@ -3,9 +3,9 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#0c0e11">
-  <meta name="description" content="FORGE Interactive Hardware Engineering Studio — AI component research, parametric 3D CAD, Lean 4 formal verification, and live Shop.dev procurement.">
-  <title>FORGE · Interactive Hardware Engineering Studio</title>
+  <meta name="theme-color" content="#050505">
+  <meta name="description" content="Describe a device and a budget. FORGE picks real parts, builds a 3D assembly, verifies limits in Lean 4 and prices the BOM from live merchants.">
+  <title>FORGE: hardware from a brief</title>
   <link rel="icon" href="/static/forge.svg" type="image/svg+xml">
   <link rel="preload" href="/static/instrument.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/studio.css">
@@ -38,10 +38,9 @@
         <span>FORGE</span>
       </a>
       <span class="separator" aria-hidden="true">/</span>
-      <span id="nav-context" class="nav-context">Interactive Engineering Studio</span>
+      <span id="nav-context" class="nav-context">Hardware studio</span>
     </div>
 
-    <!-- Live Engineering Status Bar (shown when an active project is loaded) -->
     <div id="engineering-statusbar" class="eng-statusbar" hidden>
       <div class="status-metric">
         <span class="metric-label">Project &amp; Rev</span>
@@ -96,110 +95,127 @@
       </div>
     </div>
 
-    <!-- Connection capabilities pill (shown on Landing / Research view) -->
     <div id="Capabilities-pill" class="capabilities-group">
-      <span id="lean-badge" class="cap-pill" data-ready="false">Lean 4: checking…</span>
+      <span id="lean-badge" class="cap-pill" data-ready="false">Lean 4 checking…</span>
       <span id="connection" class="connection" role="status"><i aria-hidden="true"></i><span>Checking Gemini…</span></span>
     </div>
   </header>
 
   <main id="main">
-    <!-- 1. BRIEF COMPOSER / LANDING VIEW -->
     <section id="brief-view" class="hero" aria-labelledby="title">
       <div class="compose">
-        <p class="eyebrow">AUTONOMOUS HARDWARE CAD · LEAN 4 VERIFIED · LIVE PROCUREMENT</p>
-        <h1 id="title">Describe a device.<br>Engineer every trade-off.</h1>
-        <p class="lede">Gemini agents source real SKUs, generate parametric 3D enclosures, prove electrical &amp; budget invariants in Lean 4, and price live merchant offers via Shop.dev.</p>
+        <h1 id="title">Turn a hardware idea into a buildable design.</h1>
+        <p class="lede">Describe the device and your budget. FORGE picks real parts, models the enclosure in 3D, checks the electrical and cost limits in Lean&nbsp;4, and prices every part from live merchants.</p>
 
-        <form id="composer">
-          <div class="composer-shell">
-            <label for="brief">Hardware design brief</label>
-            <textarea id="brief" name="brief" rows="4" maxlength="4000" required autocomplete="off" aria-keyshortcuts="Control+Enter Meta+Enter" placeholder="Design a wrist-worn finger-gesture detector using muscle sensors for under $100 that sends gesture events to my laptop over Bluetooth Low Energy."></textarea>
-            <div class="form-tools">
-              <span id="brief-help" class="shortcut" aria-hidden="true"><kbd id="modifier">Ctrl</kbd><span>+</span><kbd>Enter</kbd></span>
-              <div class="launch-buttons">
-                <button id="run-sample" type="button" class="secondary-cta">
-                  <svg aria-hidden="true"><use href="#play"/></svg><span>Launch Offline Wristband Studio</span>
-                </button>
-                <button id="run" class="primary" type="submit">
-                  <span id="run-label">Research with Gemini</span>
-                  <svg aria-hidden="true"><use href="#arrow"/></svg>
-                </button>
-              </div>
-            </div>
+        <form id="composer" class="composer">
+          <label for="brief">What are you building?</label>
+          <textarea id="brief" name="brief" rows="4" maxlength="4000" required autocomplete="off" aria-describedby="brief-help" aria-keyshortcuts="Control+Enter Meta+Enter" placeholder="A wristband that detects finger gestures from forearm muscles and sends them to my laptop over Bluetooth. Under $100."></textarea>
+          <div class="composer-foot">
+            <span id="brief-help" class="shortcut"><kbd id="modifier">Ctrl</kbd>+<kbd>Enter</kbd></span>
+            <button id="run" class="primary" type="submit">
+              <span id="run-label">Research with Gemini</span>
+              <svg aria-hidden="true"><use href="#arrow"/></svg>
+            </button>
           </div>
         </form>
         <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
 
-        <div class="example-row">
-          <button id="fill-example" type="button" class="example">
-            <svg aria-hidden="true"><use href="#wave"/></svg><span>Fill BLE EMG wristband brief ($100)</span><svg class="example-arrow" aria-hidden="true"><use href="#corner"/></svg>
-          </button>
-          <button id="fill-tight-budget" type="button" class="example">
-            <span>Fill tight $80 BLE wristband brief</span>
-          </button>
+        <div class="starters">
+          <span class="starters-label" id="starters-label">Examples</span>
+          <div class="starter-list" role="group" aria-labelledby="starters-label">
+            <button id="fill-example" type="button" class="starter">EMG gesture wristband · $100</button>
+            <button id="fill-tight-budget" type="button" class="starter">Same wristband · $80</button>
+          </div>
         </div>
+
+        <p class="offline">
+          No API key?
+          <button id="run-sample" type="button" class="text-link">Open the finished wristband demo<svg aria-hidden="true"><use href="#arrow"/></svg></button>
+        </p>
       </div>
 
       <figure class="study">
-        <img src="/static/wristband.webp" width="1500" height="1000" alt="Exploded wristband concept with a circuit board suspended between the shell and a translucent cover." fetchpriority="high">
-        <div class="frame-mark frame-top" aria-hidden="true"></div>
-        <div class="frame-mark frame-bottom" aria-hidden="true"></div>
-        <figcaption>
-          <span>Interactive reference architecture</span>
-          <strong>ESP32-WROOM-32E + MyoWare 2.0 Parametric Assembly</strong>
-        </figcaption>
+        <img src="/static/wristband.webp" width="1500" height="1000" alt="Exploded view of the wristband: circuit board between the shell and a translucent cover." fetchpriority="high">
+        <figcaption>Demo build · ESP32-WROOM-32E + MyoWare 2.0 · BOM $53.70</figcaption>
       </figure>
+
+      <ol class="steps" aria-label="How it works">
+        <li><span class="step-n">01</span><strong>Research</strong><span>Gemini agents compare components and pick parts that are in stock.</span></li>
+        <li><span class="step-n">02</span><strong>Model</strong><span>A parametric 3D assembly is built from the chosen parts.</span></li>
+        <li><span class="step-n">03</span><strong>Verify</strong><span>Lean&nbsp;4 checks power, voltage and budget. Failures get repaired.</span></li>
+        <li><span class="step-n">04</span><strong>Price</strong><span>Shop.dev returns live offers for every BOM line.</span></li>
+      </ol>
     </section>
 
-    <!-- 2. STREAMING AGENT RESEARCH MAP -->
-    <section id="research-view" class="research-view" aria-labelledby="research-title" hidden>
-      <div class="research-heading">
-        <div>
-          <h2 id="research-title" tabindex="-1">Autonomous Research &amp; Verification Pipeline</h2>
-          <p id="map-brief" class="map-brief"></p>
+    <!-- 2. RESEARCH GRAPH: live agent run as a node graph -->
+    <section id="research-view" class="rg" aria-labelledby="research-title" hidden>
+      <div class="rg-bar">
+        <div class="rg-bar-group">
+          <span class="rg-k">Graph</span>
+          <h2 id="research-title" class="rg-run" tabindex="-1">forge-run</h2>
+          <span class="rg-k">Nodes</span><b id="rg-nodes">0</b>
+          <span class="rg-k">Edges</span><b id="rg-edges">0</b>
+          <span class="rg-k">Workers</span><b>4</b>
         </div>
-        <div class="research-actions">
-          <button id="stop-research" class="example" type="button" hidden>Stop run</button>
-          <button id="edit-brief" class="example" type="button" hidden>Edit brief</button>
-          <button id="engineer-pcb-btn" class="example" type="button" hidden>
-            Engineer PCB <svg aria-hidden="true"><use href="#arrow"/></svg>
-          </button>
-          <button id="open-workbench-btn" class="primary" type="button" hidden>
-            Open Engineering Studio <svg aria-hidden="true"><use href="#arrow"/></svg>
-          </button>
+        <span id="map-mode" class="rg-mode"></span>
+        <div class="rg-bar-group">
+          <p id="map-status" class="rg-status" role="status"><span>Idle</span></p>
+          <b id="rg-clock" class="rg-clock">00:00.0</b>
+          <span class="rg-k">Events</span><b id="rg-events">0000</b>
         </div>
       </div>
-      <div class="research-console">
-        <div class="research-toolbar">
-          <p id="map-status" class="map-status" role="status"><span class="map-status-dot" aria-hidden="true"></span><span>Starting research</span></p>
-          <span id="map-mode" class="map-mode"></span>
-        </div>
-        <div class="research-layout">
-          <div class="map-panel">
-            <div id="map-viewport" class="map-viewport">
-              <div id="map-network" class="map-network" role="group" aria-label="Research and build decisions">
-                <svg id="map-wires" class="map-wires" aria-hidden="true"></svg>
-              </div>
-            </div>
-            <div class="map-zoom" aria-label="Graph zoom">
-              <button type="button" class="zoom-button" id="map-out" aria-label="Zoom out">−</button>
-              <button type="button" class="zoom-button zoom-fit" id="map-fit" aria-label="Reset graph zoom">100%</button>
-              <button type="button" class="zoom-button" id="map-in" aria-label="Zoom in">+</button>
-            </div>
+
+      <div id="rg-canvas" class="rg-canvas">
+        <canvas id="rg-gl-back" class="rg-gl rg-gl-back" aria-hidden="true"></canvas>
+        <div id="rg-inputs" class="rg-inputs" role="group" aria-label="Run inputs"></div>
+        <div id="rg-bus" class="rg-bus" aria-hidden="true"><span></span></div>
+        <div id="rg-grid" class="rg-grid" role="group" aria-label="Research and build stages"></div>
+        <div id="rg-tags" class="rg-tags" aria-hidden="true"></div>
+        <canvas id="rg-gl-front" class="rg-gl rg-gl-front" aria-hidden="true"></canvas>
+        <div id="map-inspector" class="rg-selected" tabindex="-1" aria-live="polite">
+          <div class="rg-selected-head">
+            <span class="rg-k">Selected</span>
+            <button type="button" id="map-follow" class="rg-follow" aria-pressed="true">Follow live</button>
           </div>
-          <aside id="map-inspector" class="map-inspector" aria-label="Decision details" tabindex="-1">
-            <div class="map-inspector-tools">
-              <strong>Stage Inspection</strong>
-              <button type="button" id="map-follow" class="map-follow" aria-pressed="true">Follow live</button>
-            </div>
-            <div id="map-detail" class="map-detail"></div>
-            <div class="map-activity">
-              <h3>Stream log</h3>
-              <ol id="map-log" aria-label="Research events"></ol>
-            </div>
-            <button id="map-back" class="example map-back" type="button">Back to graph</button>
-          </aside>
+          <div id="map-detail" class="rg-detail"></div>
+        </div>
+        <div class="rg-caption" aria-hidden="true">
+          <strong id="rg-caption-title">Waiting</strong>
+          <span id="rg-caption-line">0 / 10 stages</span>
+        </div>
+      </div>
+
+      <div class="rg-panels">
+        <section class="rg-panel" aria-labelledby="rg-log-title">
+          <h3 id="rg-log-title">Run log</h3>
+          <ol id="map-log" class="rg-log" aria-label="Research events"></ol>
+        </section>
+        <section class="rg-panel" aria-labelledby="rg-dispatch-title">
+          <h3 id="rg-dispatch-title">Dispatch</h3>
+          <ol id="rg-dispatch" class="rg-dispatch"></ol>
+          <p id="rg-dispatch-foot" class="rg-foot">parallel 4 · scheduler idle</p>
+        </section>
+        <section class="rg-panel rg-output" aria-labelledby="rg-output-title">
+          <h3 id="rg-output-title">Output / human gate</h3>
+          <div class="rg-total-row">
+            <strong id="rg-total" class="rg-total">$—</strong>
+            <span class="rg-k">Known BOM</span>
+          </div>
+          <dl id="rg-output-rows" class="rg-output-rows"></dl>
+          <p id="rg-gate" class="rg-gate">Research running. Nothing is built or bought without you.</p>
+          <div class="rg-actions">
+            <button id="engineer-pcb-btn" class="rg-btn" type="button" hidden>Engineer PCB</button>
+            <button id="open-workbench-btn" class="rg-btn rg-btn-primary" type="button" hidden>Open engineering studio</button>
+          </div>
+        </section>
+      </div>
+
+      <div class="rg-prompt">
+        <p class="rg-cmd"><span class="rg-ps">~/forge $</span> <span id="rg-cmd">research brief.md</span><i class="rg-cursor" aria-hidden="true"></i></p>
+        <p id="map-brief" class="rg-brief"></p>
+        <div class="rg-prompt-actions">
+          <button id="stop-research" class="rg-btn" type="button" hidden>Stop run</button>
+          <button id="edit-brief" class="rg-btn" type="button" hidden>Edit brief</button>
         </div>
       </div>
     </section>

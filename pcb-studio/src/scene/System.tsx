@@ -7,21 +7,13 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { CameraControls, Html } from '@react-three/drei'
 import { byId } from '@/data/catalog'
 import type { Board } from '@/data/board'
-import type { Bus, SystemDesign, SystemDevice } from '@/data/system'
+import { BUS_COLOR, type SystemDesign, type SystemDevice } from '@/data/system'
 import { routeNets } from '@/pcb/footprint'
 import { getStudio, setStudio, useStudio } from '@/state/studio'
 import { buildDevice } from './devices'
 import { partHeight } from './packages'
 import { BoardMesh, ExportBridge, Parts } from './Scene'
 import { handoff, takeHandoff } from './handoff'
-
-export const BUS_COLOR: Record<Bus, string> = {
-  power: '#d9564f',
-  motor: '#d6a23a',
-  i2c: '#5b8def',
-  gpio: '#a7adb5',
-  data: '#e9ecef',
-}
 
 const anodized = new THREE.MeshPhysicalMaterial({ color: 0x24272b, roughness: 0.42, metalness: 0.75, clearcoat: 0.2 })
 const holeMat = new THREE.MeshStandardMaterial({ color: 0x0b0c0e, roughness: 0.9 })
@@ -193,11 +185,6 @@ function Device({ d, index, sys, onReady }: { d: SystemDevice; index: number; sy
   const anim = useRef({ since: 0, from: 0, to: 0 })
   const lift = useRef(0)
   const m = useMemo(() => mount(sys, d), [sys, d])
-  const wheels = useMemo(() => {
-    const w: THREE.Object3D[] = []
-    model.traverse((o) => o.name === 'wheel' && w.push(o))
-    return w
-  }, [model])
   useEffect(() => {
     model.traverse((o) => {
       o.userData.device = d.id
@@ -215,7 +202,10 @@ function Device({ d, index, sys, onReady }: { d: SystemDevice; index: number; sy
     const e = from + (to - from) * easeOut(t)
     lift.current = THREE.MathUtils.damp(lift.current, hovered || selected ? 3 : 0, 10, dt)
     grp.position.set(m.base.x + m.explode.x * e, m.base.y + m.explode.y * e + lift.current, m.base.z + m.explode.z * e)
-    for (const w of wheels) w.rotation.x -= dt * (getStudio().touring ? 2.2 : 0.6) * (d.rot === 180 ? -1 : 1)
+    const wheelStep = dt * (getStudio().touring ? 2.2 : 0.6) * (d.rot === 180 ? -1 : 1)
+    grp.traverse((o) => {
+      if (o.name === 'wheel') o.rotation.x -= wheelStep
+    })
   })
   const tag = Math.max(item.dimensions.thickness, (model.userData.height as number) ?? 10)
   return (

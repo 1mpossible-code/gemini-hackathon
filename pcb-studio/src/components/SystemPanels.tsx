@@ -4,9 +4,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import { ArrowDownRight, ArrowUpRight, Check, CircuitBoard, Repeat2, Search, TriangleAlert, ZoomIn } from 'lucide-react'
 import { byId } from '@/data/catalog'
-import { alternativesFor, systemCost, unitPrice, type SystemDevice } from '@/data/system'
-import { getStudio, setStudio, useStudio, type Scale } from '@/state/studio'
-import { BUS_COLOR } from '@/scene/System'
+import { alternativesFor, systemCost, unitPrice, BUS_COLOR, type SystemDevice } from '@/data/system'
+import { getStudio, setStudio, useStudio, goScale, type Scale } from '@/state/studio'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -14,15 +13,6 @@ import { cn } from '@/lib/utils'
 
 const ease = [0.16, 1, 0.3, 1] as const
 const usd = (n: number) => `$${n.toFixed(2)}`
-
-/** Ask for a scale change; the 3D views animate the camera, the veil swaps the scene. */
-export function goScale(scale: Scale) {
-  const s = getStudio()
-  if (s.mode !== 'engineer') return setStudio({ mode: 'engineer', scale })
-  if (s.scale === scale) return
-  if (scale === 'board') window.dispatchEvent(new Event('forge:dive'))
-  else window.dispatchEvent(new CustomEvent('forge:scale', { detail: 'system' }))
-}
 
 export function ScaleSwitch() {
   const scale = useStudio((s) => s.scale)
@@ -87,17 +77,24 @@ export function ScaleTransition() {
   )
 }
 
-export function SystemLibrary() {
-  const sys = useStudio((s) => s.system)
-  const device = useStudio((s) => s.device)
-  const hovered = useStudio((s) => s.hoveredDevice)
-  const board = useStudio((s) => s.board)
-  const [q, setQ] = useState('')
-  const rows = sys.devices.filter((d) => {
-    const item = byId[d.catalogId]
-    return !q || `${d.label} ${item.name} ${item.mpn} ${d.port}`.toLowerCase().includes(q.toLowerCase())
-  })
-  const Row = ({ id, n, title, sub, dot }: { id: string; n: string; title: string; sub: string; dot: string }) => (
+function AssemblyRow({
+  id,
+  n,
+  title,
+  sub,
+  dot,
+  device,
+  hovered,
+}: {
+  id: string
+  n: string
+  title: string
+  sub: string
+  dot: string
+  device: string | null
+  hovered: string | null
+}) {
+  return (
     <button
       onClick={() => setStudio({ device: id, touring: false })}
       onMouseEnter={() => setStudio({ hoveredDevice: id })}
@@ -117,6 +114,18 @@ export function SystemLibrary() {
       </span>
     </button>
   )
+}
+
+export function SystemLibrary() {
+  const sys = useStudio((s) => s.system)
+  const device = useStudio((s) => s.device)
+  const hovered = useStudio((s) => s.hoveredDevice)
+  const board = useStudio((s) => s.board)
+  const [q, setQ] = useState('')
+  const rows = sys.devices.filter((d) => {
+    const item = byId[d.catalogId]
+    return !q || `${d.label} ${item.name} ${item.mpn} ${d.port}`.toLowerCase().includes(q.toLowerCase())
+  })
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-border max-lg:hidden">
       <div className="flex items-center justify-between px-3 pb-2 pt-3">
@@ -129,11 +138,11 @@ export function SystemLibrary() {
       </div>
       <div className="flex-1 overflow-y-auto px-1.5 pb-3">
         <div className="label-mono mt-2 px-2 py-1">Custom PCB</div>
-        <Row id="pcb" n="00" title={board.name} sub={`${board.width}×${board.height} mm · ${board.parts.length} parts`} dot="#ffffff" />
+        <AssemblyRow id="pcb" n="00" title={board.name} sub={`${board.width}×${board.height} mm · ${board.parts.length} parts`} dot="#ffffff" device={device} hovered={hovered} />
         <div className="label-mono mt-3 px-2 py-1">Devices</div>
         {rows.map((d) => {
           const item = byId[d.catalogId]
-          return <Row key={d.id} id={d.id} n={String(sys.devices.indexOf(d) + 1).padStart(2, '0')} title={item.name} sub={`${d.label} · ${d.port}`} dot={BUS_COLOR[d.bus]} />
+          return <AssemblyRow key={d.id} id={d.id} n={String(sys.devices.indexOf(d) + 1).padStart(2, '0')} title={item.name} sub={`${d.label} · ${d.port}`} dot={BUS_COLOR[d.bus]} device={device} hovered={hovered} />
         })}
         <div className="label-mono mt-4 px-2 py-1">Buses</div>
         <div className="grid grid-cols-2 gap-x-2 gap-y-1 px-2 text-[11px] text-muted-foreground">

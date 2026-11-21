@@ -1,0 +1,2287 @@
+{
+  "generator": "FORGE 3D Reverse-Engineering Pipeline",
+  "total_models": 120,
+  "target_count": 120,
+  "models": [
+    {
+      "id": "arduino-uno-r3",
+      "name": "Arduino Uno R3",
+      "category": "board",
+      "manufacturer": "Arduino",
+      "mpn": "A000066",
+      "triangles": 1044,
+      "mesh_count": 6,
+      "measured_bounds_mm": {
+        "width_x": 68.58,
+        "height_y": 12.1,
+        "depth_z": 53.34
+      },
+      "stl_path": "models/stl/arduino-uno-r3.stl",
+      "stl_bytes": 52284,
+      "glb_path": "models/glb/arduino-uno-r3.glb",
+      "glb_bytes": 89000,
+      "datasheet_url": ""
+    },
+    {
+      "id": "arduino-uno-r4-minima",
+      "name": "Arduino Uno R4 Minima",
+      "category": "board",
+      "manufacturer": "Arduino",
+      "mpn": "ABX00080",
+      "triangles": 1044,
+      "mesh_count": 6,
+      "measured_bounds_mm": {
+        "width_x": 68.58,
+        "height_y": 12.1,
+        "depth_z": 53.34
+      },
+      "stl_path": "models/stl/arduino-uno-r4-minima.stl",
+      "stl_bytes": 52284,
+      "glb_path": "models/glb/arduino-uno-r4-minima.glb",
+      "glb_bytes": 89096,
+      "datasheet_url": ""
+    },
+    {
+      "id": "arduino-uno-r4-wifi",
+      "name": "Arduino Uno R4 WiFi",
+      "category": "board",
+      "manufacturer": "Arduino",
+      "mpn": "ABX00087",
+      "triangles": 1120,
+      "mesh_count": 6,
+      "measured_bounds_mm": {
+        "width_x": 68.58,
+        "height_y": 12.1,
+        "depth_z": 53.34
+      },
+      "stl_path": "models/stl/arduino-uno-r4-wifi.stl",
+      "stl_bytes": 56084,
+      "glb_path": "models/glb/arduino-uno-r4-wifi.glb",
+      "glb_bytes": 94996,
+      "datasheet_url": ""
+    },
+    {
+      "id": "arduino-nano",
+      "name": "Arduino Nano",
+      "category": "board",
+      "manufacturer": "Arduino",
+      "mpn": "A000005",
+      "triangles": 408,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 45.0,
+        "height_y": 9.35,
+        "depth_z": 18.0
+      },
+      "stl_path": "models/stl/arduino-nano.stl",
+      "stl_bytes": 20484,
+      "glb_path": "models/glb/arduino-nano.glb",
+      "glb_bytes": 38100,
+      "datasheet_url": ""
+    },
+    {
+      "id": "arduino-nano-esp32",
+      "name": "Arduino Nano ESP32",
+      "category": "board",
+      "manufacturer": "Arduino",
+      "mpn": "ABX00083",
+      "triangles": 444,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 45.25,
+        "height_y": 11.25,
+        "depth_z": 18.0
+      },
+      "stl_path": "models/stl/arduino-nano-esp32.stl",
+      "stl_bytes": 22284,
+      "glb_path": "models/glb/arduino-nano-esp32.glb",
+      "glb_bytes": 40896,
+      "datasheet_url": ""
+    },
+    {
+      "id": "arduino-mega-2560",
+      "name": "Arduino Mega 2560",
+      "category": "board",
+      "manufacturer": "Arduino",
+      "mpn": "A000067",
+      "triangles": 1004,
+      "mesh_count": 6,
+      "measured_bounds_mm": {
+        "width_x": 101.6,
+        "height_y": 12.1,
+        "depth_z": 53.34
+      },
+      "stl_path": "models/stl/arduino-mega-2560.stl",
+      "stl_bytes": 50284,
+      "glb_path": "models/glb/arduino-mega-2560.glb",
+      "glb_bytes": 85876,
+      "datasheet_url": ""
+    },
+    {
+      "id": "esp32-devkitc-32e",
+      "name": "ESP32-DevKitC-32E",
+      "category": "board",
+      "manufacturer": "Espressif",
+      "mpn": "ESP32-DevKitC-32E",
+      "triangles": 668,
+      "mesh_count": 5,
+      "measured_bounds_mm": {
+        "width_x": 54.65,
+        "height_y": 11.25,
+        "depth_z": 27.9
+      },
+      "stl_path": "models/stl/esp32-devkitc-32e.stl",
+      "stl_bytes": 33484,
+      "glb_path": "models/glb/esp32-devkitc-32e.glb",
+      "glb_bytes": 59032,
+      "datasheet_url": ""
+    },
+    {
+      "id": "esp32-s3-devkitc-1",
+      "name": "ESP32-S3-DevKitC-1 N8R8",
+      "category": "board",
+      "manufacturer": "Espressif",
+      "mpn": "ESP32-S3-DevKitC-1-N8R8",
+      "triangles": 740,
+      "mesh_count": 5,
+      "measured_bounds_mm": {
+        "width_x": 70.05,
+        "height_y": 11.25,
+        "depth_z": 25.4
+      },
+      "stl_path": "models/stl/esp32-s3-devkitc-1.stl",
+      "stl_bytes": 37084,
+      "glb_path": "models/glb/esp32-s3-devkitc-1.glb",
+      "glb_bytes": 64704,
+      "datasheet_url": ""
+    },
+    {
+      "id": "esp32-c3-supermini",
+      "name": "ESP32-C3 SuperMini",
+      "category": "board",
+      "manufacturer": "Generic",
+      "mpn": "ESP32-C3-SuperMini",
+      "triangles": 228,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 22.75,
+        "height_y": 11.25,
+        "depth_z": 18.0
+      },
+      "stl_path": "models/stl/esp32-c3-supermini.stl",
+      "stl_bytes": 11484,
+      "glb_path": "models/glb/esp32-c3-supermini.glb",
+      "glb_bytes": 24044,
+      "datasheet_url": ""
+    },
+    {
+      "id": "nodemcu-esp8266-v3",
+      "name": "NodeMCU ESP8266 LoLin V3",
+      "category": "board",
+      "manufacturer": "LoLin",
+      "mpn": "NodeMCU-V3",
+      "triangles": 572,
+      "mesh_count": 5,
+      "measured_bounds_mm": {
+        "width_x": 58.25,
+        "height_y": 11.25,
+        "depth_z": 31.0
+      },
+      "stl_path": "models/stl/nodemcu-esp8266-v3.stl",
+      "stl_bytes": 28684,
+      "glb_path": "models/glb/nodemcu-esp8266-v3.glb",
+      "glb_bytes": 51496,
+      "datasheet_url": ""
+    },
+    {
+      "id": "rpi-pico",
+      "name": "Raspberry Pi Pico",
+      "category": "board",
+      "manufacturer": "Raspberry Pi",
+      "mpn": "SC0915",
+      "triangles": 692,
+      "mesh_count": 6,
+      "measured_bounds_mm": {
+        "width_x": 51.75,
+        "height_y": 10.65,
+        "depth_z": 21.0
+      },
+      "stl_path": "models/stl/rpi-pico.stl",
+      "stl_bytes": 34684,
+      "glb_path": "models/glb/rpi-pico.glb",
+      "glb_bytes": 61384,
+      "datasheet_url": ""
+    },
+    {
+      "id": "rpi-pico-w",
+      "name": "Raspberry Pi Pico W",
+      "category": "board",
+      "manufacturer": "Raspberry Pi",
+      "mpn": "SC0918",
+      "triangles": 704,
+      "mesh_count": 6,
+      "measured_bounds_mm": {
+        "width_x": 51.75,
+        "height_y": 10.65,
+        "depth_z": 21.0
+      },
+      "stl_path": "models/stl/rpi-pico-w.stl",
+      "stl_bytes": 35284,
+      "glb_path": "models/glb/rpi-pico-w.glb",
+      "glb_bytes": 62368,
+      "datasheet_url": ""
+    },
+    {
+      "id": "rpi-pico-2",
+      "name": "Raspberry Pi Pico 2",
+      "category": "board",
+      "manufacturer": "Raspberry Pi",
+      "mpn": "Pico 2",
+      "triangles": 692,
+      "mesh_count": 6,
+      "measured_bounds_mm": {
+        "width_x": 51.75,
+        "height_y": 10.65,
+        "depth_z": 21.0
+      },
+      "stl_path": "models/stl/rpi-pico-2.stl",
+      "stl_bytes": 34684,
+      "glb_path": "models/glb/rpi-pico-2.glb",
+      "glb_bytes": 61412,
+      "datasheet_url": ""
+    },
+    {
+      "id": "rpi-4b-4gb",
+      "name": "Raspberry Pi 4 Model B 4GB",
+      "category": "board",
+      "manufacturer": "Raspberry Pi",
+      "mpn": "SC0194",
+      "triangles": 404,
+      "mesh_count": 5,
+      "measured_bounds_mm": {
+        "width_x": 85.0,
+        "height_y": 9.35,
+        "depth_z": 56.0
+      },
+      "stl_path": "models/stl/rpi-4b-4gb.stl",
+      "stl_bytes": 20284,
+      "glb_path": "models/glb/rpi-4b-4gb.glb",
+      "glb_bytes": 38344,
+      "datasheet_url": ""
+    },
+    {
+      "id": "rpi-5-4gb",
+      "name": "Raspberry Pi 5 4GB",
+      "category": "board",
+      "manufacturer": "Raspberry Pi",
+      "mpn": "Raspberry Pi 5 4GB",
+      "triangles": 404,
+      "mesh_count": 5,
+      "measured_bounds_mm": {
+        "width_x": 85.0,
+        "height_y": 9.35,
+        "depth_z": 56.0
+      },
+      "stl_path": "models/stl/rpi-5-4gb.stl",
+      "stl_bytes": 20284,
+      "glb_path": "models/glb/rpi-5-4gb.glb",
+      "glb_bytes": 38336,
+      "datasheet_url": ""
+    },
+    {
+      "id": "rpi-zero-2-w",
+      "name": "Raspberry Pi Zero 2 W",
+      "category": "board",
+      "manufacturer": "Raspberry Pi",
+      "mpn": "SC0510",
+      "triangles": 404,
+      "mesh_count": 5,
+      "measured_bounds_mm": {
+        "width_x": 65.0,
+        "height_y": 9.35,
+        "depth_z": 30.0
+      },
+      "stl_path": "models/stl/rpi-zero-2-w.stl",
+      "stl_bytes": 20284,
+      "glb_path": "models/glb/rpi-zero-2-w.glb",
+      "glb_bytes": 38388,
+      "datasheet_url": ""
+    },
+    {
+      "id": "stm32-blue-pill",
+      "name": "STM32 Blue Pill",
+      "category": "board",
+      "manufacturer": "Generic",
+      "mpn": "STM32F103C8T6",
+      "triangles": 656,
+      "mesh_count": 5,
+      "measured_bounds_mm": {
+        "width_x": 53.0,
+        "height_y": 9.35,
+        "depth_z": 22.9
+      },
+      "stl_path": "models/stl/stm32-blue-pill.stl",
+      "stl_bytes": 32884,
+      "glb_path": "models/glb/stm32-blue-pill.glb",
+      "glb_bytes": 58012,
+      "datasheet_url": ""
+    },
+    {
+      "id": "nucleo-f401re",
+      "name": "STM32 Nucleo-F401RE",
+      "category": "board",
+      "manufacturer": "STMicroelectronics",
+      "mpn": "NUCLEO-F401RE",
+      "triangles": 1112,
+      "mesh_count": 5,
+      "measured_bounds_mm": {
+        "width_x": 82.5,
+        "height_y": 9.35,
+        "depth_z": 70.0
+      },
+      "stl_path": "models/stl/nucleo-f401re.stl",
+      "stl_bytes": 55684,
+      "glb_path": "models/glb/nucleo-f401re.glb",
+      "glb_bytes": 93624,
+      "datasheet_url": ""
+    },
+    {
+      "id": "teensy-4.1",
+      "name": "Teensy 4.1",
+      "category": "board",
+      "manufacturer": "PJRC",
+      "mpn": "TEENSY41",
+      "triangles": 480,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 61.0,
+        "height_y": 9.35,
+        "depth_z": 17.8
+      },
+      "stl_path": "models/stl/teensy-4.1.stl",
+      "stl_bytes": 24084,
+      "glb_path": "models/glb/teensy-4.1.glb",
+      "glb_bytes": 43700,
+      "datasheet_url": ""
+    },
+    {
+      "id": "feather-rp2040",
+      "name": "Adafruit Feather RP2040",
+      "category": "board",
+      "manufacturer": "Adafruit",
+      "mpn": "4884",
+      "triangles": 596,
+      "mesh_count": 6,
+      "measured_bounds_mm": {
+        "width_x": 50.8,
+        "height_y": 14.25,
+        "depth_z": 22.8
+      },
+      "stl_path": "models/stl/feather-rp2040.stl",
+      "stl_bytes": 29884,
+      "glb_path": "models/glb/feather-rp2040.glb",
+      "glb_bytes": 54064,
+      "datasheet_url": ""
+    },
+    {
+      "id": "xiao-esp32s3",
+      "name": "Seeed XIAO ESP32S3",
+      "category": "board",
+      "manufacturer": "Seeed Studio",
+      "mpn": "XIAO-ESP32S3",
+      "triangles": 204,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 21.25,
+        "height_y": 11.25,
+        "depth_z": 17.5
+      },
+      "stl_path": "models/stl/xiao-esp32s3.stl",
+      "stl_bytes": 10284,
+      "glb_path": "models/glb/xiao-esp32s3.glb",
+      "glb_bytes": 22104,
+      "datasheet_url": ""
+    },
+    {
+      "id": "kb2040",
+      "name": "Adafruit KB2040",
+      "category": "board",
+      "manufacturer": "Adafruit",
+      "mpn": "5302",
+      "triangles": 456,
+      "mesh_count": 5,
+      "measured_bounds_mm": {
+        "width_x": 33.0,
+        "height_y": 11.45,
+        "depth_z": 17.8
+      },
+      "stl_path": "models/stl/kb2040.stl",
+      "stl_bytes": 22884,
+      "glb_path": "models/glb/kb2040.glb",
+      "glb_bytes": 42356,
+      "datasheet_url": ""
+    },
+    {
+      "id": "esp32-wroom-32e",
+      "name": "ESP32-WROOM-32E-N8",
+      "category": "module",
+      "manufacturer": "Espressif",
+      "mpn": "ESP32-WROOM-32E-N8",
+      "triangles": 168,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 20.32,
+        "height_y": 12.95,
+        "depth_z": 25.5
+      },
+      "stl_path": "models/stl/esp32-wroom-32e.stl",
+      "stl_bytes": 8484,
+      "glb_path": "models/glb/esp32-wroom-32e.glb",
+      "glb_bytes": 19408,
+      "datasheet_url": ""
+    },
+    {
+      "id": "esp32-s3-wroom-1",
+      "name": "ESP32-S3-WROOM-1-N8R8",
+      "category": "module",
+      "manufacturer": "Espressif",
+      "mpn": "ESP32-S3-WROOM-1-N8R8",
+      "triangles": 168,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 20.32,
+        "height_y": 12.95,
+        "depth_z": 25.5
+      },
+      "stl_path": "models/stl/esp32-s3-wroom-1.stl",
+      "stl_bytes": 8484,
+      "glb_path": "models/glb/esp32-s3-wroom-1.glb",
+      "glb_bytes": 19424,
+      "datasheet_url": ""
+    },
+    {
+      "id": "esp32-c3-mini-1",
+      "name": "ESP32-C3-MINI-1",
+      "category": "module",
+      "manufacturer": "Espressif",
+      "mpn": "ESP32-C3-MINI-1",
+      "triangles": 168,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 20.32,
+        "height_y": 12.05,
+        "depth_z": 16.6
+      },
+      "stl_path": "models/stl/esp32-c3-mini-1.stl",
+      "stl_bytes": 8484,
+      "glb_path": "models/glb/esp32-c3-mini-1.glb",
+      "glb_bytes": 19396,
+      "datasheet_url": ""
+    },
+    {
+      "id": "bme280",
+      "name": "BME280 breakout",
+      "category": "sensor",
+      "manufacturer": "Bosch Sensortec",
+      "mpn": "BME280",
+      "triangles": 132,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 15.24,
+        "height_y": 10.65,
+        "depth_z": 12.0
+      },
+      "stl_path": "models/stl/bme280.stl",
+      "stl_bytes": 6684,
+      "glb_path": "models/glb/bme280.glb",
+      "glb_bytes": 16432,
+      "datasheet_url": ""
+    },
+    {
+      "id": "bmp280",
+      "name": "BMP280 breakout",
+      "category": "sensor",
+      "manufacturer": "Bosch Sensortec",
+      "mpn": "BMP280",
+      "triangles": 132,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 15.24,
+        "height_y": 10.65,
+        "depth_z": 12.0
+      },
+      "stl_path": "models/stl/bmp280.stl",
+      "stl_bytes": 6684,
+      "glb_path": "models/glb/bmp280.glb",
+      "glb_bytes": 16432,
+      "datasheet_url": ""
+    },
+    {
+      "id": "dht22",
+      "name": "DHT22 / AM2302",
+      "category": "sensor",
+      "manufacturer": "Aosong",
+      "mpn": "AM2302",
+      "triangles": 108,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 15.1,
+        "height_y": 15.35,
+        "depth_z": 25.0
+      },
+      "stl_path": "models/stl/dht22.stl",
+      "stl_bytes": 5484,
+      "glb_path": "models/glb/dht22.glb",
+      "glb_bytes": 14592,
+      "datasheet_url": ""
+    },
+    {
+      "id": "sht31",
+      "name": "SHT31-DIS breakout",
+      "category": "sensor",
+      "manufacturer": "Sensirion",
+      "mpn": "SHT31-DIS-B",
+      "triangles": 120,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 18.0,
+        "height_y": 10.65,
+        "depth_z": 13.0
+      },
+      "stl_path": "models/stl/sht31.stl",
+      "stl_bytes": 6084,
+      "glb_path": "models/glb/sht31.glb",
+      "glb_bytes": 15576,
+      "datasheet_url": ""
+    },
+    {
+      "id": "mpu6050",
+      "name": "MPU-6050 breakout",
+      "category": "sensor",
+      "manufacturer": "TDK InvenSense",
+      "mpn": "MPU-6050",
+      "triangles": 156,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 21.0,
+        "height_y": 10.65,
+        "depth_z": 16.0
+      },
+      "stl_path": "models/stl/mpu6050.stl",
+      "stl_bytes": 7884,
+      "glb_path": "models/glb/mpu6050.glb",
+      "glb_bytes": 18372,
+      "datasheet_url": ""
+    },
+    {
+      "id": "icm20948",
+      "name": "ICM-20948 breakout",
+      "category": "sensor",
+      "manufacturer": "TDK InvenSense",
+      "mpn": "ICM-20948",
+      "triangles": 144,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 25.0,
+        "height_y": 10.65,
+        "depth_z": 15.0
+      },
+      "stl_path": "models/stl/icm20948.stl",
+      "stl_bytes": 7284,
+      "glb_path": "models/glb/icm20948.glb",
+      "glb_bytes": 17436,
+      "datasheet_url": ""
+    },
+    {
+      "id": "bno055",
+      "name": "BNO055 breakout",
+      "category": "sensor",
+      "manufacturer": "Bosch Sensortec",
+      "mpn": "BNO055",
+      "triangles": 132,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 20.0,
+        "height_y": 11.65,
+        "depth_z": 27.0
+      },
+      "stl_path": "models/stl/bno055.stl",
+      "stl_bytes": 6684,
+      "glb_path": "models/glb/bno055.glb",
+      "glb_bytes": 16412,
+      "datasheet_url": ""
+    },
+    {
+      "id": "vl53l0x",
+      "name": "VL53L0X breakout",
+      "category": "sensor",
+      "manufacturer": "STMicroelectronics",
+      "mpn": "VL53L0X",
+      "triangles": 132,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 15.24,
+        "height_y": 9.65,
+        "depth_z": 18.0
+      },
+      "stl_path": "models/stl/vl53l0x.stl",
+      "stl_bytes": 6684,
+      "glb_path": "models/glb/vl53l0x.glb",
+      "glb_bytes": 16536,
+      "datasheet_url": ""
+    },
+    {
+      "id": "hcsr04",
+      "name": "HC-SR04 ultrasonic",
+      "category": "sensor",
+      "manufacturer": "Generic",
+      "mpn": "HC-SR04",
+      "triangles": 108,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 45.0,
+        "height_y": 22.65,
+        "depth_z": 20.0
+      },
+      "stl_path": "models/stl/hcsr04.stl",
+      "stl_bytes": 5484,
+      "glb_path": "models/glb/hcsr04.glb",
+      "glb_bytes": 14536,
+      "datasheet_url": ""
+    },
+    {
+      "id": "hcsr501",
+      "name": "HC-SR501 PIR",
+      "category": "sensor",
+      "manufacturer": "Generic",
+      "mpn": "HC-SR501",
+      "triangles": 96,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 32.0,
+        "height_y": 32.65,
+        "depth_z": 24.0
+      },
+      "stl_path": "models/stl/hcsr501.stl",
+      "stl_bytes": 4884,
+      "glb_path": "models/glb/hcsr501.glb",
+      "glb_bytes": 13620,
+      "datasheet_url": ""
+    },
+    {
+      "id": "ina219",
+      "name": "INA219 breakout",
+      "category": "sensor",
+      "manufacturer": "Texas Instruments",
+      "mpn": "INA219AIDCNR",
+      "triangles": 132,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 25.0,
+        "height_y": 11.65,
+        "depth_z": 22.0
+      },
+      "stl_path": "models/stl/ina219.stl",
+      "stl_bytes": 6684,
+      "glb_path": "models/glb/ina219.glb",
+      "glb_bytes": 16400,
+      "datasheet_url": ""
+    },
+    {
+      "id": "acs712",
+      "name": "ACS712 current module",
+      "category": "sensor",
+      "manufacturer": "Allegro MicroSystems",
+      "mpn": "ACS712ELCTR-05B-T",
+      "triangles": 120,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 31.0,
+        "height_y": 21.65,
+        "depth_z": 13.0
+      },
+      "stl_path": "models/stl/acs712.stl",
+      "stl_bytes": 6084,
+      "glb_path": "models/glb/acs712.glb",
+      "glb_bytes": 15576,
+      "datasheet_url": ""
+    },
+    {
+      "id": "ds18b20",
+      "name": "DS18B20",
+      "category": "sensor",
+      "manufacturer": "Analog Devices",
+      "mpn": "DS18B20+",
+      "triangles": 48,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 9.6,
+        "height_y": 4.9,
+        "depth_z": 4.6
+      },
+      "stl_path": "models/stl/ds18b20.stl",
+      "stl_bytes": 2484,
+      "glb_path": "models/glb/ds18b20.glb",
+      "glb_bytes": 8676,
+      "datasheet_url": ""
+    },
+    {
+      "id": "max30102",
+      "name": "MAX30102 breakout",
+      "category": "sensor",
+      "manufacturer": "Analog Devices",
+      "mpn": "MAX30102EFD+",
+      "triangles": 120,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 18.0,
+        "height_y": 10.65,
+        "depth_z": 14.0
+      },
+      "stl_path": "models/stl/max30102.stl",
+      "stl_bytes": 6084,
+      "glb_path": "models/glb/max30102.glb",
+      "glb_bytes": 15604,
+      "datasheet_url": ""
+    },
+    {
+      "id": "ads1115",
+      "name": "ADS1115 breakout",
+      "category": "sensor",
+      "manufacturer": "Texas Instruments",
+      "mpn": "ADS1115IDGSR",
+      "triangles": 156,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 20.32,
+        "height_y": 10.65,
+        "depth_z": 16.0
+      },
+      "stl_path": "models/stl/ads1115.stl",
+      "stl_bytes": 7884,
+      "glb_path": "models/glb/ads1115.glb",
+      "glb_bytes": 18408,
+      "datasheet_url": ""
+    },
+    {
+      "id": "tcs34725",
+      "name": "TCS34725 breakout",
+      "category": "sensor",
+      "manufacturer": "ams OSRAM",
+      "mpn": "TCS34725FN",
+      "triangles": 144,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 20.0,
+        "height_y": 11.65,
+        "depth_z": 18.0
+      },
+      "stl_path": "models/stl/tcs34725.stl",
+      "stl_bytes": 7284,
+      "glb_path": "models/glb/tcs34725.glb",
+      "glb_bytes": 17484,
+      "datasheet_url": ""
+    },
+    {
+      "id": "neo6m",
+      "name": "GY-NEO6M GPS",
+      "category": "sensor",
+      "manufacturer": "u-blox",
+      "mpn": "NEO-6M",
+      "triangles": 120,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 36.0,
+        "height_y": 15.65,
+        "depth_z": 26.0
+      },
+      "stl_path": "models/stl/neo6m.stl",
+      "stl_bytes": 6084,
+      "glb_path": "models/glb/neo6m.glb",
+      "glb_bytes": 15532,
+      "datasheet_url": ""
+    },
+    {
+      "id": "sg90",
+      "name": "SG90 micro servo",
+      "category": "actuator",
+      "manufacturer": "Tower Pro",
+      "mpn": "SG90",
+      "triangles": 176,
+      "mesh_count": 4,
+      "measured_bounds_mm": {
+        "width_x": 32.0,
+        "height_y": 30.25,
+        "depth_z": 12.2
+      },
+      "stl_path": "models/stl/sg90.stl",
+      "stl_bytes": 8884,
+      "glb_path": "models/glb/sg90.glb",
+      "glb_bytes": 19824,
+      "datasheet_url": ""
+    },
+    {
+      "id": "28byj-48",
+      "name": "28BYJ-48 stepper",
+      "category": "actuator",
+      "manufacturer": "Generic",
+      "mpn": "28BYJ-48",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 28.0,
+        "height_y": 20.1,
+        "depth_z": 28.0
+      },
+      "stl_path": "models/stl/28byj-48.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/28byj-48.glb",
+      "glb_bytes": 6840,
+      "datasheet_url": ""
+    },
+    {
+      "id": "tt-motor-148",
+      "name": "TT gear motor 1:48",
+      "category": "actuator",
+      "manufacturer": "Generic",
+      "mpn": "TT-130-148",
+      "triangles": 88,
+      "mesh_count": 3,
+      "measured_bounds_mm": {
+        "width_x": 82.0,
+        "height_y": 22.5,
+        "depth_z": 22.5
+      },
+      "stl_path": "models/stl/tt-motor-148.stl",
+      "stl_bytes": 4484,
+      "glb_path": "models/glb/tt-motor-148.glb",
+      "glb_bytes": 12400,
+      "datasheet_url": ""
+    },
+    {
+      "id": "n20-gearmotor-100",
+      "name": "N20 micro gear motor 100 rpm",
+      "category": "actuator",
+      "manufacturer": "Generic",
+      "mpn": "N20-6V-100",
+      "triangles": 88,
+      "mesh_count": 3,
+      "measured_bounds_mm": {
+        "width_x": 36.0,
+        "height_y": 12.0,
+        "depth_z": 12.0
+      },
+      "stl_path": "models/stl/n20-gearmotor-100.stl",
+      "stl_bytes": 4484,
+      "glb_path": "models/glb/n20-gearmotor-100.glb",
+      "glb_bytes": 12500,
+      "datasheet_url": ""
+    },
+    {
+      "id": "jga25-370-12v",
+      "name": "JGA25-370 gear motor 12 V",
+      "category": "actuator",
+      "manufacturer": "Generic",
+      "mpn": "JGA25-370-12V",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 62.0,
+        "height_y": 26.1,
+        "depth_z": 25.0
+      },
+      "stl_path": "models/stl/jga25-370-12v.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/jga25-370-12v.glb",
+      "glb_bytes": 6868,
+      "datasheet_url": ""
+    },
+    {
+      "id": "uln2003-board",
+      "name": "ULN2003 stepper driver board",
+      "category": "driver",
+      "manufacturer": "Texas Instruments",
+      "mpn": "ULN2003A",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 35.0,
+        "height_y": 13.1,
+        "depth_z": 32.0
+      },
+      "stl_path": "models/stl/uln2003-board.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/uln2003-board.glb",
+      "glb_bytes": 6892,
+      "datasheet_url": ""
+    },
+    {
+      "id": "a4988",
+      "name": "A4988 stepper module",
+      "category": "driver",
+      "manufacturer": "Allegro MicroSystems",
+      "mpn": "A4988",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 15.2,
+        "height_y": 9.1,
+        "depth_z": 20.3
+      },
+      "stl_path": "models/stl/a4988.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/a4988.glb",
+      "glb_bytes": 6820,
+      "datasheet_url": ""
+    },
+    {
+      "id": "drv8825",
+      "name": "DRV8825 stepper module",
+      "category": "driver",
+      "manufacturer": "Texas Instruments",
+      "mpn": "DRV8825",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 15.2,
+        "height_y": 9.1,
+        "depth_z": 20.3
+      },
+      "stl_path": "models/stl/drv8825.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/drv8825.glb",
+      "glb_bytes": 6832,
+      "datasheet_url": ""
+    },
+    {
+      "id": "tmc2209",
+      "name": "TMC2209 SilentStepStick",
+      "category": "driver",
+      "manufacturer": "Analog Devices",
+      "mpn": "TMC2209-LA",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 15.2,
+        "height_y": 9.1,
+        "depth_z": 20.3
+      },
+      "stl_path": "models/stl/tmc2209.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/tmc2209.glb",
+      "glb_bytes": 6832,
+      "datasheet_url": ""
+    },
+    {
+      "id": "tb6612fng",
+      "name": "TB6612FNG",
+      "category": "driver",
+      "manufacturer": "Toshiba",
+      "mpn": "TB6612FNG",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 7.8,
+        "height_y": 2.6,
+        "depth_z": 5.3
+      },
+      "stl_path": "models/stl/tb6612fng.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/tb6612fng.glb",
+      "glb_bytes": 6792,
+      "datasheet_url": ""
+    },
+    {
+      "id": "l298n",
+      "name": "L298N motor module",
+      "category": "driver",
+      "manufacturer": "STMicroelectronics",
+      "mpn": "L298N",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 43.0,
+        "height_y": 28.1,
+        "depth_z": 43.0
+      },
+      "stl_path": "models/stl/l298n.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/l298n.glb",
+      "glb_bytes": 6840,
+      "datasheet_url": ""
+    },
+    {
+      "id": "drv8833",
+      "name": "DRV8833 breakout",
+      "category": "driver",
+      "manufacturer": "Texas Instruments",
+      "mpn": "DRV8833RTYR",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 16.0,
+        "height_y": 4.1,
+        "depth_z": 20.0
+      },
+      "stl_path": "models/stl/drv8833.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/drv8833.glb",
+      "glb_bytes": 6848,
+      "datasheet_url": ""
+    },
+    {
+      "id": "relay-1ch",
+      "name": "1-channel relay module",
+      "category": "driver",
+      "manufacturer": "Songle",
+      "mpn": "SRD-05VDC-SL-C",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 50.0,
+        "height_y": 20.1,
+        "depth_z": 26.0
+      },
+      "stl_path": "models/stl/relay-1ch.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/relay-1ch.glb",
+      "glb_bytes": 6888,
+      "datasheet_url": ""
+    },
+    {
+      "id": "irlz44n",
+      "name": "IRLZ44N",
+      "category": "driver",
+      "manufacturer": "Infineon",
+      "mpn": "IRLZ44NPBF",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 10.2,
+        "height_y": 16.6,
+        "depth_z": 4.5
+      },
+      "stl_path": "models/stl/irlz44n.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/irlz44n.glb",
+      "glb_bytes": 6824,
+      "datasheet_url": ""
+    },
+    {
+      "id": "ssd1306-096",
+      "name": "SSD1306 0.96\" OLED",
+      "category": "display",
+      "manufacturer": "Solomon Systech",
+      "mpn": "SSD1306",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 27.3,
+        "height_y": 5.2,
+        "depth_z": 27.8
+      },
+      "stl_path": "models/stl/ssd1306-096.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/ssd1306-096.glb",
+      "glb_bytes": 6884,
+      "datasheet_url": ""
+    },
+    {
+      "id": "sh1106-13",
+      "name": "SH1106 1.3\" OLED",
+      "category": "display",
+      "manufacturer": "Sino Wealth",
+      "mpn": "SH1106",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 35.0,
+        "height_y": 5.2,
+        "depth_z": 33.5
+      },
+      "stl_path": "models/stl/sh1106-13.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/sh1106-13.glb",
+      "glb_bytes": 6812,
+      "datasheet_url": ""
+    },
+    {
+      "id": "st7789-154",
+      "name": "ST7789 1.54\" TFT",
+      "category": "display",
+      "manufacturer": "Sitronix",
+      "mpn": "ST7789V",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 44.0,
+        "height_y": 5.2,
+        "depth_z": 34.0
+      },
+      "stl_path": "models/stl/st7789-154.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/st7789-154.glb",
+      "glb_bytes": 6808,
+      "datasheet_url": ""
+    },
+    {
+      "id": "st7789-20",
+      "name": "ST7789 2.0\" TFT",
+      "category": "display",
+      "manufacturer": "Sitronix",
+      "mpn": "ST7789V",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 58.0,
+        "height_y": 5.2,
+        "depth_z": 40.0
+      },
+      "stl_path": "models/stl/st7789-20.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/st7789-20.glb",
+      "glb_bytes": 6796,
+      "datasheet_url": ""
+    },
+    {
+      "id": "ili9341-28",
+      "name": "ILI9341 2.8\" TFT",
+      "category": "display",
+      "manufacturer": "Ilitek",
+      "mpn": "ILI9341",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 86.0,
+        "height_y": 5.2,
+        "depth_z": 50.0
+      },
+      "stl_path": "models/stl/ili9341-28.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/ili9341-28.glb",
+      "glb_bytes": 6876,
+      "datasheet_url": ""
+    },
+    {
+      "id": "lcd1602",
+      "name": "1602 HD44780 LCD",
+      "category": "display",
+      "manufacturer": "Hitachi",
+      "mpn": "HD44780",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 80.0,
+        "height_y": 14.4,
+        "depth_z": 36.0
+      },
+      "stl_path": "models/stl/lcd1602.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/lcd1602.glb",
+      "glb_bytes": 6804,
+      "datasheet_url": ""
+    },
+    {
+      "id": "pcf8574",
+      "name": "PCF8574",
+      "category": "display",
+      "manufacturer": "Texas Instruments",
+      "mpn": "PCF8574DW",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 10.3,
+        "height_y": 3.85,
+        "depth_z": 7.56
+      },
+      "stl_path": "models/stl/pcf8574.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/pcf8574.glb",
+      "glb_bytes": 6824,
+      "datasheet_url": ""
+    },
+    {
+      "id": "ws2812b",
+      "name": "WS2812B",
+      "category": "display",
+      "manufacturer": "Worldsemi",
+      "mpn": "WS2812B",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 5.0,
+        "height_y": 2.8,
+        "depth_z": 5.38
+      },
+      "stl_path": "models/stl/ws2812b.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/ws2812b.glb",
+      "glb_bytes": 6792,
+      "datasheet_url": ""
+    },
+    {
+      "id": "ws2812b-strip",
+      "name": "WS2812B strip, 60 LED/m",
+      "category": "display",
+      "manufacturer": "Worldsemi",
+      "mpn": "WS2812B-60",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 1000.0,
+        "height_y": 3.7,
+        "depth_z": 10.0
+      },
+      "stl_path": "models/stl/ws2812b-strip.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/ws2812b-strip.glb",
+      "glb_bytes": 6812,
+      "datasheet_url": ""
+    },
+    {
+      "id": "max7219-8x8",
+      "name": "MAX7219 8\u00d78 matrix",
+      "category": "display",
+      "manufacturer": "Analog Devices",
+      "mpn": "MAX7219CNG",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 32.0,
+        "height_y": 15.2,
+        "depth_z": 32.0
+      },
+      "stl_path": "models/stl/max7219-8x8.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/max7219-8x8.glb",
+      "glb_bytes": 6824,
+      "datasheet_url": ""
+    },
+    {
+      "id": "epaper-29",
+      "name": "2.9\" e-paper module",
+      "category": "display",
+      "manufacturer": "Generic",
+      "mpn": "EPD-2.9",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 90.0,
+        "height_y": 6.2,
+        "depth_z": 38.0
+      },
+      "stl_path": "models/stl/epaper-29.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/epaper-29.glb",
+      "glb_bytes": 6788,
+      "datasheet_url": ""
+    },
+    {
+      "id": "nrf24l01",
+      "name": "nRF24L01+",
+      "category": "comms",
+      "manufacturer": "Nordic Semiconductor",
+      "mpn": "nRF24L01+",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 29.0,
+        "height_y": 5.1,
+        "depth_z": 15.0
+      },
+      "stl_path": "models/stl/nrf24l01.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/nrf24l01.glb",
+      "glb_bytes": 6856,
+      "datasheet_url": ""
+    },
+    {
+      "id": "rfm95w",
+      "name": "RFM95W LoRa",
+      "category": "comms",
+      "manufacturer": "HopeRF",
+      "mpn": "RFM95W",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 16.0,
+        "height_y": 3.6,
+        "depth_z": 16.0
+      },
+      "stl_path": "models/stl/rfm95w.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/rfm95w.glb",
+      "glb_bytes": 6812,
+      "datasheet_url": ""
+    },
+    {
+      "id": "hc05",
+      "name": "HC-05 Bluetooth module",
+      "category": "comms",
+      "manufacturer": "Generic",
+      "mpn": "HC-05",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 37.0,
+        "height_y": 5.1,
+        "depth_z": 16.0
+      },
+      "stl_path": "models/stl/hc05.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/hc05.glb",
+      "glb_bytes": 6828,
+      "datasheet_url": ""
+    },
+    {
+      "id": "mcp2515",
+      "name": "MCP2515 CAN module",
+      "category": "comms",
+      "manufacturer": "Microchip",
+      "mpn": "MCP2515-I/SO",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 40.0,
+        "height_y": 13.1,
+        "depth_z": 28.0
+      },
+      "stl_path": "models/stl/mcp2515.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/mcp2515.glb",
+      "glb_bytes": 6840,
+      "datasheet_url": ""
+    },
+    {
+      "id": "w5500",
+      "name": "W5500 Ethernet module",
+      "category": "comms",
+      "manufacturer": "WIZnet",
+      "mpn": "W5500",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 56.0,
+        "height_y": 17.1,
+        "depth_z": 34.0
+      },
+      "stl_path": "models/stl/w5500.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/w5500.glb",
+      "glb_bytes": 6760,
+      "datasheet_url": ""
+    },
+    {
+      "id": "sim800l",
+      "name": "SIM800L",
+      "category": "comms",
+      "manufacturer": "SIMCom",
+      "mpn": "SIM800L",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 25.0,
+        "height_y": 4.1,
+        "depth_z": 23.0
+      },
+      "stl_path": "models/stl/sim800l.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/sim800l.glb",
+      "glb_bytes": 6776,
+      "datasheet_url": ""
+    },
+    {
+      "id": "ch340c",
+      "name": "CH340C",
+      "category": "comms",
+      "manufacturer": "WCH",
+      "mpn": "CH340C",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 10.0,
+        "height_y": 2.85,
+        "depth_z": 4.0
+      },
+      "stl_path": "models/stl/ch340c.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/ch340c.glb",
+      "glb_bytes": 6776,
+      "datasheet_url": ""
+    },
+    {
+      "id": "cp2102",
+      "name": "CP2102",
+      "category": "comms",
+      "manufacturer": "Silicon Labs",
+      "mpn": "CP2102-GM",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 5.0,
+        "height_y": 2.0,
+        "depth_z": 5.0
+      },
+      "stl_path": "models/stl/cp2102.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/cp2102.glb",
+      "glb_bytes": 6788,
+      "datasheet_url": ""
+    },
+    {
+      "id": "ams1117-33",
+      "name": "AMS1117-3.3",
+      "category": "power",
+      "manufacturer": "Advanced Monolithic Systems",
+      "mpn": "AMS1117-3.3",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 6.5,
+        "height_y": 2.9,
+        "depth_z": 3.5
+      },
+      "stl_path": "models/stl/ams1117-33.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/ams1117-33.glb",
+      "glb_bytes": 6880,
+      "datasheet_url": ""
+    },
+    {
+      "id": "lm2596",
+      "name": "LM2596 buck module",
+      "category": "power",
+      "manufacturer": "Texas Instruments",
+      "mpn": "LM2596S-ADJ",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 43.0,
+        "height_y": 15.1,
+        "depth_z": 21.0
+      },
+      "stl_path": "models/stl/lm2596.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/lm2596.glb",
+      "glb_bytes": 6880,
+      "datasheet_url": ""
+    },
+    {
+      "id": "mp1584",
+      "name": "MP1584 buck module",
+      "category": "power",
+      "manufacturer": "Monolithic Power Systems",
+      "mpn": "MP1584EN",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 22.0,
+        "height_y": 5.1,
+        "depth_z": 17.0
+      },
+      "stl_path": "models/stl/mp1584.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/mp1584.glb",
+      "glb_bytes": 6800,
+      "datasheet_url": ""
+    },
+    {
+      "id": "tp4056",
+      "name": "TP4056 charger module",
+      "category": "power",
+      "manufacturer": "Nanjing Top Power",
+      "mpn": "TP4056",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 26.0,
+        "height_y": 5.1,
+        "depth_z": 17.0
+      },
+      "stl_path": "models/stl/tp4056.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/tp4056.glb",
+      "glb_bytes": 6824,
+      "datasheet_url": ""
+    },
+    {
+      "id": "mt3608",
+      "name": "MT3608 boost module",
+      "category": "power",
+      "manufacturer": "Aerosemi",
+      "mpn": "MT3608",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 36.0,
+        "height_y": 8.1,
+        "depth_z": 17.0
+      },
+      "stl_path": "models/stl/mt3608.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/mt3608.glb",
+      "glb_bytes": 6796,
+      "datasheet_url": ""
+    },
+    {
+      "id": "xl6009",
+      "name": "XL6009 boost module",
+      "category": "power",
+      "manufacturer": "XLSEMI",
+      "mpn": "XL6009E1",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 43.0,
+        "height_y": 15.1,
+        "depth_z": 21.0
+      },
+      "stl_path": "models/stl/xl6009.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/xl6009.glb",
+      "glb_bytes": 6868,
+      "datasheet_url": ""
+    },
+    {
+      "id": "holder-18650",
+      "name": "18650 cell holder",
+      "category": "power",
+      "manufacturer": "Generic",
+      "mpn": "18650-1S",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 77.0,
+        "height_y": 16.1,
+        "depth_z": 21.0
+      },
+      "stl_path": "models/stl/holder-18650.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/holder-18650.glb",
+      "glb_bytes": 6868,
+      "datasheet_url": ""
+    },
+    {
+      "id": "lipo-jst-ph-2",
+      "name": "1S LiPo JST-PH lead",
+      "category": "power",
+      "manufacturer": "JST",
+      "mpn": "PHR-2",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 6.5,
+        "height_y": 7.1,
+        "depth_z": 4.5
+      },
+      "stl_path": "models/stl/lipo-jst-ph-2.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/lipo-jst-ph-2.glb",
+      "glb_bytes": 6868,
+      "datasheet_url": ""
+    },
+    {
+      "id": "microsd-module",
+      "name": "microSD SPI module",
+      "category": "storage",
+      "manufacturer": "Generic",
+      "mpn": "MICROSD-SPI",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 43.0,
+        "height_y": 5.1,
+        "depth_z": 24.0
+      },
+      "stl_path": "models/stl/microsd-module.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/microsd-module.glb",
+      "glb_bytes": 6908,
+      "datasheet_url": ""
+    },
+    {
+      "id": "w25q128",
+      "name": "W25Q128JV",
+      "category": "storage",
+      "manufacturer": "Winbond",
+      "mpn": "W25Q128JVSIQ",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 5.3,
+        "height_y": 3.0,
+        "depth_z": 5.3
+      },
+      "stl_path": "models/stl/w25q128.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/w25q128.glb",
+      "glb_bytes": 6784,
+      "datasheet_url": ""
+    },
+    {
+      "id": "at24c256",
+      "name": "AT24C256",
+      "category": "storage",
+      "manufacturer": "Microchip",
+      "mpn": "AT24C256C-SSHL-T",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 4.9,
+        "height_y": 2.85,
+        "depth_z": 3.9
+      },
+      "stl_path": "models/stl/at24c256.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/at24c256.glb",
+      "glb_bytes": 6840,
+      "datasheet_url": ""
+    },
+    {
+      "id": "tact-6mm",
+      "name": "6\u00d76 mm tactile switch",
+      "category": "input",
+      "manufacturer": "Generic",
+      "mpn": "TS-1187A",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 6.0,
+        "height_y": 6.1,
+        "depth_z": 6.0
+      },
+      "stl_path": "models/stl/tact-6mm.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/tact-6mm.glb",
+      "glb_bytes": 6792,
+      "datasheet_url": ""
+    },
+    {
+      "id": "ec11",
+      "name": "EC11 rotary encoder",
+      "category": "input",
+      "manufacturer": "Generic",
+      "mpn": "EC11",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 12.0,
+        "height_y": 14.1,
+        "depth_z": 14.0
+      },
+      "stl_path": "models/stl/ec11.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/ec11.glb",
+      "glb_bytes": 6852,
+      "datasheet_url": ""
+    },
+    {
+      "id": "joystick-ky023",
+      "name": "KY-023 joystick",
+      "category": "input",
+      "manufacturer": "Generic",
+      "mpn": "KY-023",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 34.0,
+        "height_y": 33.1,
+        "depth_z": 26.0
+      },
+      "stl_path": "models/stl/joystick-ky023.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/joystick-ky023.glb",
+      "glb_bytes": 6900,
+      "datasheet_url": ""
+    },
+    {
+      "id": "keypad-4x4",
+      "name": "4\u00d74 membrane keypad",
+      "category": "input",
+      "manufacturer": "Generic",
+      "mpn": "KEYPAD-4X4",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 69.0,
+        "height_y": 1.9,
+        "depth_z": 77.0
+      },
+      "stl_path": "models/stl/keypad-4x4.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/keypad-4x4.glb",
+      "glb_bytes": 6812,
+      "datasheet_url": ""
+    },
+    {
+      "id": "ttp223",
+      "name": "TTP223 touch module",
+      "category": "input",
+      "manufacturer": "Tontek",
+      "mpn": "TTP223-BA6",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 24.0,
+        "height_y": 3.1,
+        "depth_z": 16.0
+      },
+      "stl_path": "models/stl/ttp223.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/ttp223.glb",
+      "glb_bytes": 6840,
+      "datasheet_url": ""
+    },
+    {
+      "id": "max98357a",
+      "name": "MAX98357A I2S amp",
+      "category": "audio",
+      "manufacturer": "Analog Devices",
+      "mpn": "MAX98357AETE+",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 22.0,
+        "height_y": 4.1,
+        "depth_z": 14.0
+      },
+      "stl_path": "models/stl/max98357a.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/max98357a.glb",
+      "glb_bytes": 6860,
+      "datasheet_url": ""
+    },
+    {
+      "id": "buzzer-passive",
+      "name": "Passive buzzer",
+      "category": "audio",
+      "manufacturer": "Generic",
+      "mpn": "TMB12A05",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 12.0,
+        "height_y": 10.6,
+        "depth_z": 12.0
+      },
+      "stl_path": "models/stl/buzzer-passive.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/buzzer-passive.glb",
+      "glb_bytes": 6872,
+      "datasheet_url": ""
+    },
+    {
+      "id": "buzzer-active",
+      "name": "Active buzzer",
+      "category": "audio",
+      "manufacturer": "Generic",
+      "mpn": "ACTIVE-12MM-5V",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 12.0,
+        "height_y": 10.6,
+        "depth_z": 12.0
+      },
+      "stl_path": "models/stl/buzzer-active.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/buzzer-active.glb",
+      "glb_bytes": 6872,
+      "datasheet_url": ""
+    },
+    {
+      "id": "inmp441",
+      "name": "INMP441 I2S mic",
+      "category": "audio",
+      "manufacturer": "TDK InvenSense",
+      "mpn": "INMP441",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 18.0,
+        "height_y": 4.1,
+        "depth_z": 13.0
+      },
+      "stl_path": "models/stl/inmp441.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/inmp441.glb",
+      "glb_bytes": 6904,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0402-0",
+      "name": "0402 0 \u03a9 jumper",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0402JR-070RL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.45,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0402-0.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0402-0.glb",
+      "glb_bytes": 6800,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0402-10",
+      "name": "0402 10\u03a9 resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0402FR-0710RL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.45,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0402-10.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0402-10.glb",
+      "glb_bytes": 6808,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0402-100",
+      "name": "0402 100\u03a9 resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0402FR-07100RL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.45,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0402-100.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0402-100.glb",
+      "glb_bytes": 6816,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0402-220",
+      "name": "0402 220\u03a9 resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0402FR-07220RL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.45,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0402-220.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0402-220.glb",
+      "glb_bytes": 6816,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0402-330",
+      "name": "0402 330\u03a9 resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0402FR-07330RL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.45,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0402-330.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0402-330.glb",
+      "glb_bytes": 6816,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0402-470",
+      "name": "0402 470\u03a9 resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0402FR-07470RL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.45,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0402-470.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0402-470.glb",
+      "glb_bytes": 6816,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0402-1k",
+      "name": "0402 1k resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0402FR-071KL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.45,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0402-1k.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0402-1k.glb",
+      "glb_bytes": 6804,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0402-2.2k",
+      "name": "0402 2.2k resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0402FR-072K2L",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.45,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0402-2.2k.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0402-2.2k.glb",
+      "glb_bytes": 6816,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0402-4.7k",
+      "name": "0402 4.7k resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0402FR-074K7L",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.45,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0402-4.7k.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0402-4.7k.glb",
+      "glb_bytes": 6816,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0402-10k",
+      "name": "0402 10k resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0402FR-0710KL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.45,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0402-10k.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0402-10k.glb",
+      "glb_bytes": 6808,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0402-22k",
+      "name": "0402 22k resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0402FR-0722KL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.45,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0402-22k.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0402-22k.glb",
+      "glb_bytes": 6808,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0402-47k",
+      "name": "0402 47k resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0402FR-0747KL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.45,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0402-47k.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0402-47k.glb",
+      "glb_bytes": 6808,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0402-100k",
+      "name": "0402 100k resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0402FR-07100KL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.45,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0402-100k.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0402-100k.glb",
+      "glb_bytes": 6816,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0402-1m",
+      "name": "0402 1M resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0402FR-071ML",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.45,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0402-1m.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0402-1m.glb",
+      "glb_bytes": 6804,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0603-0",
+      "name": "0603 0 \u03a9 jumper",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0603JR-070RL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.55,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0603-0.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0603-0.glb",
+      "glb_bytes": 6816,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0603-10",
+      "name": "0603 10\u03a9 resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0603FR-0710RL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.55,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0603-10.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0603-10.glb",
+      "glb_bytes": 6824,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0603-100",
+      "name": "0603 100\u03a9 resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0603FR-07100RL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.55,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0603-100.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0603-100.glb",
+      "glb_bytes": 6828,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0603-220",
+      "name": "0603 220\u03a9 resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0603FR-07220RL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.55,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0603-220.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0603-220.glb",
+      "glb_bytes": 6828,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0603-330",
+      "name": "0603 330\u03a9 resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0603FR-07330RL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.55,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0603-330.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0603-330.glb",
+      "glb_bytes": 6828,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0603-470",
+      "name": "0603 470\u03a9 resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0603FR-07470RL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.55,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0603-470.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0603-470.glb",
+      "glb_bytes": 6828,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0603-1k",
+      "name": "0603 1k resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0603FR-071KL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.55,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0603-1k.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0603-1k.glb",
+      "glb_bytes": 6816,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0603-2.2k",
+      "name": "0603 2.2k resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0603FR-072K2L",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.55,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0603-2.2k.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0603-2.2k.glb",
+      "glb_bytes": 6828,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0603-4.7k",
+      "name": "0603 4.7k resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0603FR-074K7L",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.55,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0603-4.7k.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0603-4.7k.glb",
+      "glb_bytes": 6828,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0603-10k",
+      "name": "0603 10k resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0603FR-0710KL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.55,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0603-10k.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0603-10k.glb",
+      "glb_bytes": 6824,
+      "datasheet_url": ""
+    },
+    {
+      "id": "r-0603-22k",
+      "name": "0603 22k resistor",
+      "category": "passive",
+      "manufacturer": "Yageo",
+      "mpn": "RC0603FR-0722KL",
+      "triangles": 24,
+      "mesh_count": 2,
+      "measured_bounds_mm": {
+        "width_x": 3.0,
+        "height_y": 1.55,
+        "depth_z": 3.0
+      },
+      "stl_path": "models/stl/r-0603-22k.stl",
+      "stl_bytes": 1284,
+      "glb_path": "models/glb/r-0603-22k.glb",
+      "glb_bytes": 6824,
+      "datasheet_url": ""
+    }
+  ]
+}

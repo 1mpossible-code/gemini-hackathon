@@ -4,6 +4,14 @@ import { byId, catalog, type CatalogItem } from './catalog'
 
 export type Bus = 'power' | 'motor' | 'i2c' | 'gpio' | 'data'
 
+export const BUS_COLOR: Record<Bus, string> = {
+  power: '#ffffff',
+  motor: '#d4d4d4',
+  i2c: '#a3a3a3',
+  gpio: '#737373',
+  data: '#e5e5e5',
+}
+
 export interface SystemDevice {
   id: string
   catalogId: string

@@ -2,38 +2,13 @@ import { useSyncExternalStore } from 'react'
 import { board as defaultBoard, type Board } from '@/data/board'
 import { defaultSystem, type SystemDesign } from '@/data/system'
 import type { Verification } from '@/verify/types'
+import type { OfferMatchKind, ShopOffer, ShopSearchEntry } from '@/data/shop'
+
+export type { OfferMatchKind, ShopOffer, ShopSearchEntry }
 
 export type ViewMode = '3d' | 'top' | 'bottom'
 export type Scale = 'board' | 'system'
 export type ExportFormat = 'stl' | 'glb' | 'obj' | 'png' | 'json'
-export type OfferMatchKind = 'exact_match' | 'bundle_or_pack' | 'variant_or_accessory'
-
-export interface ShopOffer {
-  offerId: string
-  productId: string
-  variantId: string
-  title: string
-  sellerName: string
-  sellerDomain: string
-  priceMinor: number
-  currency: string
-  formattedPrice: string
-  priceUsd: number | null
-  available: boolean
-  url: string
-  matchKind: OfferMatchKind
-  matchNote: string
-}
-
-export interface ShopSearchEntry {
-  mpn: string
-  query: string
-  status: 'ok' | 'no_results' | 'error'
-  offers: ShopOffer[]
-  warnings: string[]
-  error?: string
-  retrievedAt: string
-}
 
 export interface HistoryEntry {
   board: Board
@@ -74,7 +49,7 @@ function briefFromUrl(): string | null {
   const brief = q.get('brief')
   if (!brief) return null
   const parts = q.get('parts')
-  return parts ? `${brief} Build it around: ${parts}.` : brief
+  return (parts ? `${brief} Build it around: ${parts}.` : brief).slice(0, 2000)
 }
 
 function nextRevision(rev: string): string {
@@ -104,7 +79,7 @@ export function computeBoardBomCost(
 
 let state: StudioState = {
   scale: new URLSearchParams(location.search).get('scale') === 'board' || new URLSearchParams(location.search).has('brief') ? 'board' : 'system',
-  mode: new URLSearchParams(location.search).get('mode') === 'research' ? 'research' : 'engineer',
+  mode: new URLSearchParams(location.search).get('mode') === 'engineer' || new URLSearchParams(location.search).has('brief') ? 'engineer' : 'research',
   pendingPrompt: briefFromUrl(),
   system: defaultSystem,
   device: null,
@@ -205,3 +180,13 @@ export function useStudio<T>(select: (s: StudioState) => T): T {
 export const requestFit = () => setStudio((s) => ({ fitNonce: s.fitNonce + 1 }))
 export const requestExport = (format: ExportFormat) =>
   setStudio((s) => ({ exportRequest: { format, nonce: (s.exportRequest?.nonce ?? 0) + 1 } }))
+
+/** Ask for a scale change; the 3D views animate the camera, the veil swaps the scene. */
+export function goScale(scale: Scale) {
+  const s = getStudio()
+  if (s.mode !== 'engineer') return setStudio({ mode: 'engineer', scale })
+  if (s.scale === scale) return
+  if (scale === 'board') window.dispatchEvent(new Event('forge:dive'))
+  else window.dispatchEvent(new CustomEvent('forge:scale', { detail: 'system' }))
+}
+
