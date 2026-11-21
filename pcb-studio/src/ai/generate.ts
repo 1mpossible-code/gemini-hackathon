@@ -23,7 +23,7 @@ export async function generateBoard(
 ): Promise<Board> {
   const res = await fetch(opts.endpoint ?? '/api/generate', {
     method: 'POST',
-    headers: { 'content-type': 'application/json', accept: 'application/x-ndjson' },
+    headers: { 'content-type': 'application/json', accept: 'application/x-ndjson', ...keyHeader() },
     body: JSON.stringify({ prompt, constraints: opts.constraints }),
     signal: opts.signal,
   })
@@ -80,4 +80,29 @@ export async function generateBoard(
   if (opts.signal?.aborted) throw new DOMException('Generation aborted', 'AbortError')
   if (!board) throw new Error(done ? 'Server finished without a board' : 'Connection closed before the board arrived')
   return board
+}
+
+const KEY_STORE = 'forge.geminiKey'
+
+/** The Gemini API key the user entered, kept in this browser only. */
+export function storedGeminiKey(): string {
+  try {
+    return localStorage.getItem(KEY_STORE) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function storeGeminiKey(key: string) {
+  try {
+    if (key) localStorage.setItem(KEY_STORE, key)
+    else localStorage.removeItem(KEY_STORE)
+  } catch {
+    // storage blocked: the key just is not remembered
+  }
+}
+
+function keyHeader(): Record<string, string> {
+  const key = storedGeminiKey().trim()
+  return key ? { 'x-gemini-key': key } : {}
 }

@@ -22,6 +22,7 @@ import { cn } from '@/lib/utils'
 import { ResearchPane } from '@/components/Research'
 import { ScaleSwitch, ScaleTransition, SystemInspector, SystemLibrary } from '@/components/SystemPanels'
 import { DEMO_BRIEFS, systemCost, systemFromPrompt } from '@/data/system'
+import { storedGeminiKey, storeGeminiKey } from '@/ai/generate'
 
 const ease = [0.16, 1, 0.3, 1] as const
 
@@ -256,6 +257,7 @@ function Prompt() {
   const [busy, setBusy] = useState(false)
   const [log, setLog] = useState<GenLog[]>([])
   const [error, setError] = useState<string | null>(null)
+  const [apiKey, setApiKey] = useState(storedGeminiKey)
   const pending = useStudio((s) => s.pendingPrompt)
   const started = useRef<string | null>(null)
   useEffect(() => {
@@ -310,6 +312,19 @@ function Prompt() {
           {busy ? <Loader2 className="size-3.5 animate-spin" /> : 'Generate'}
         </Button>
       </form>
+      <label className="mt-2 flex items-center gap-2 rounded-lg border border-border bg-background/70 px-3 py-1.5 backdrop-blur-md">
+        <span className="label-mono shrink-0 !text-[10px] text-muted-foreground">Gemini API key</span>
+        <input
+          type="password"
+          value={apiKey}
+          onChange={(e) => { const v = e.target.value.trim(); setApiKey(v); storeGeminiKey(v) }}
+          placeholder="Enter Gemini API key"
+          autoComplete="off"
+          spellCheck={false}
+          className="min-w-0 flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-muted-foreground"
+        />
+        <span className="label-mono shrink-0 !text-[10px] text-muted-foreground">{apiKey ? 'saved in this browser' : 'offline planner'}</span>
+      </label>
       {!busy && (
         <div className="mt-2 flex flex-wrap justify-center gap-1.5" role="group" aria-label="Demo briefs">
           {DEMO_BRIEFS.map((d) => (
