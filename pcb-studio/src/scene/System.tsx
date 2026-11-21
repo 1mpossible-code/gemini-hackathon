@@ -113,7 +113,7 @@ const PRIM_MAT: Record<PrimMaterial, THREE.Material> = {
   plastic: new THREE.MeshStandardMaterial({ color: 0x2a2d31, roughness: 0.6, metalness: 0.1 }),
   rubber: new THREE.MeshStandardMaterial({ color: 0x101113, roughness: 0.95 }),
   carbon: new THREE.MeshPhysicalMaterial({ color: 0x15171a, roughness: 0.35, metalness: 0.4, clearcoat: 0.6 }),
-  clear: new THREE.MeshPhysicalMaterial({ color: 0xcfd6dd, roughness: 0.2, transparent: true, opacity: 0.45 }),
+  clear: new THREE.MeshPhysicalMaterial({ color: 0xcfd6dd, roughness: 0.2, transparent: true, opacity: 0.22, depthWrite: false }),
 }
 
 /** Arms, rotors, walls and feet described by the system design. */
@@ -357,6 +357,27 @@ function Cables({ sys, groups, pcb }: { sys: SystemDesign; groups: React.RefObje
 }
 
 const HERO = new THREE.Vector3(250, 215, 320)
+const HERO_TARGET = new THREE.Vector3(0, -6, 0)
+
+/**
+ * Hero camera pose. Bodies made of primitives (drone arms, a lamp arm, a printer
+ * frame) can reach well past the base plate, so the camera backs off to fit them.
+ * Systems without a structure (rover, wristband) keep the fixed pose.
+ */
+function heroPose(sys: SystemDesign): { pos: THREE.Vector3; target: THREE.Vector3 } {
+  if (!sys.structure?.length) return { pos: HERO, target: HERO_TARGET }
+  const box = new THREE.Box3()
+  for (const p of sys.structure) {
+    const half = p.shape === 'box' ? Math.max(...p.size) / 2 : Math.max(p.size[0], p.size[1] / 2)
+    box.expandByPoint(new THREE.Vector3(p.pos[0] - half, p.pos[1] - half, p.pos[2] - half))
+    box.expandByPoint(new THREE.Vector3(p.pos[0] + half, p.pos[1] + half, p.pos[2] + half))
+  }
+  const radius = box.getSize(new THREE.Vector3()).length() / 2
+  const dist = radius * 3
+  if (dist <= HERO.length()) return { pos: HERO, target: HERO_TARGET }
+  const target = new THREE.Vector3(0, box.getCenter(new THREE.Vector3()).y, 0)
+  return { pos: target.clone().addScaledVector(HERO.clone().normalize(), dist), target }
+}
 
 function SystemCamera({ sys, groups, root }: { sys: SystemDesign; groups: React.RefObject<Map<string, THREE.Group>>; root: React.RefObject<THREE.Group | null> }) {
   const controls = useRef<CameraControls>(null)
@@ -369,6 +390,8 @@ function SystemCamera({ sys, groups, root }: { sys: SystemDesign; groups: React.
   const diving = useRef(false)
   const pcbCentre = useMemo(() => new THREE.Vector3(0, sys.pcbHeight, 0), [sys])
   const lastView = useRef(view)
+  const hero = useMemo(() => heroPose(sys), [sys])
+  const goHero = (c: CameraControls) => c.setLookAt(hero.pos.x, hero.pos.y, hero.pos.z, hero.target.x, hero.target.y, hero.target.z, true)
 
   // entry: continue from the board camera if we zoomed out of it, else a crane shot
   useEffect(() => {
@@ -388,7 +411,7 @@ function SystemCamera({ sys, groups, root }: { sys: SystemDesign; groups: React.
     }
     const id = setTimeout(() => {
       c.smoothTime = 1.15
-      c.setLookAt(HERO.x, HERO.y, HERO.z, 0, -6, 0, true).then(() => {
+      goHero(c).then(() => {
         c.smoothTime = 0.5
         intro.current = false
       })
@@ -456,7 +479,7 @@ function SystemCamera({ sys, groups, root }: { sys: SystemDesign; groups: React.
     const c = controls.current
     if (!c || !fitNonce || !root.current) return
     setStudio({ device: null })
-    c.setLookAt(HERO.x, HERO.y, HERO.z, 0, -6, 0, true)
+    goHero(c)
   }, [fitNonce, root])
 
   useEffect(() => {
@@ -466,7 +489,7 @@ function SystemCamera({ sys, groups, root }: { sys: SystemDesign; groups: React.
     setStudio({ touring: false })
     if (view === 'top') c.setLookAt(0, 560, 0.01, 0, 0, 0, true)
     else if (view === 'bottom') c.setLookAt(0, -480, 0.01, 0, 0, 0, true)
-    else c.setLookAt(HERO.x, HERO.y, HERO.z, 0, -6, 0, true)
+    else goHero(c)
   }, [view])
 
   // showcase: orbit the rover, visiting each device, then dive into the PCB
@@ -482,7 +505,7 @@ function SystemCamera({ sys, groups, root }: { sys: SystemDesign; groups: React.
       while (alive) {
         c.smoothTime = 1.2
         setStudio({ exploded: true, device: null })
-        await c.setLookAt(-HERO.x * (lap % 2 ? -1 : 1), HERO.y * 1.1, HERO.z, 0, 10, 0, true)
+        await c.setLookAt(-hero.pos.x * (lap % 2 ? -1 : 1), hero.pos.y * 1.1, hero.pos.z, hero.target.x, hero.target.y + 16, hero.target.z, true)
         await wait(1500)
         for (let i = 0; i < sys.devices.length && alive; i++) {
           const d = sys.devices[i]
@@ -503,7 +526,7 @@ function SystemCamera({ sys, groups, root }: { sys: SystemDesign; groups: React.
         if (!alive) return
         c.smoothTime = 1.2
         setStudio({ exploded: false, device: null })
-        await c.setLookAt(HERO.x, HERO.y, HERO.z, 0, -6, 0, true)
+        await goHero(c)
         c.smoothTime = 6
         c.rotate(Math.PI * 0.6, 0, true)
         await wait(4500)
