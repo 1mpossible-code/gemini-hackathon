@@ -1,6 +1,6 @@
 # KB2040 vendor asset (Adafruit SKU 5302)
 
-`assets/kb2040.glb` is a glTF binary made from Adafruit's STEP model of the KB2040, product id 5302. `tools/step_to_glb.py` is the converter. It is a pilot for one vendor file. It does not change the parametric assembly generator.
+`assets/kb2040.glb` is a glTF binary made from Adafruit's STEP model of the KB2040, product id 5302. `tools/step_to_glb.py` is the converter. It is a pilot for one vendor file.
 
 ## Source
 
