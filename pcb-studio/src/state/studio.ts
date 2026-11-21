@@ -192,8 +192,32 @@ let state: StudioState = {
 
 const listeners = new Set<() => void>()
 
+// Monotonic tokens reject stale work even after undo recreates the same revision.
+let designEpoch = 0
+let requestEpoch = 0
+
+export function beginDesignRequest() {
+  const design = designEpoch
+  const request = ++requestEpoch
+  if (state.verification.status === 'running') {
+    setStudio({ verification: { status: 'idle', theorems: [] } })
+  }
+  return () => design === designEpoch && request === requestEpoch
+}
+
 export function setStudio(patch: Partial<StudioState> | ((s: StudioState) => Partial<StudioState>)) {
   const next = typeof patch === 'function' ? patch(state) : patch
+  if (['board', 'system', 'budgetUsd', 'selectedOfferByMpn', 'history'].some(
+    (key) => key in next && next[key as keyof StudioState] !== state[key as keyof StudioState],
+  )) {
+    designEpoch++
+    if (!next.verification && state.verification.status === 'running') {
+      next.verification = { status: 'idle', theorems: [] }
+    }
+  }
+  if (next.board && next.board !== state.board && !next.verification) {
+    next.verification = { status: 'idle', theorems: [] }
+  }
   state = { ...state, ...next }
   listeners.forEach((l) => l())
 }
@@ -321,7 +345,9 @@ export function undoLastEdit() {
   setStudio({
     system: last.system,
     board: last.board,
-    verification: last.verification,
+    verification: last.verification.status === 'running'
+      ? { status: 'idle', theorems: [] }
+      : last.verification,
     budgetUsd: last.budgetUsd,
     selectedOfferByMpn: last.selectedOfferByMpn,
     history: state.history.slice(0, -1),

@@ -9,7 +9,7 @@ import {
 import { PcbScene } from '@/scene/Scene'
 import {
   commitBoardEdit, commitSystemSwap, computeBoardBomCost, computeSystemDevicesCost,
-  cycleLabelMode, getStudio, requestExport, requestFit, setStudio, undoLastEdit, useStudio,
+  beginDesignRequest, cycleLabelMode, getStudio, requestExport, requestFit, setStudio, undoLastEdit, useStudio,
   type ExportFormat, type ShopOffer, type ShopSearchEntry,
 } from '@/state/studio'
 import type { Board, Part } from '@/data/board'
@@ -57,15 +57,19 @@ async function fetchShopSearch(p: { mpn: string; name: string; manufacturer: str
 }
 
 async function runBoardDesignChecks() {
+  const isCurrent = beginDesignRequest()
+  const board = getStudio().board
   setStudio({ verification: { status: 'running', theorems: [] } })
   try {
     const loader = verifyModules['./verify/verify.ts']
     if (!loader) throw new Error('Design verification service unavailable')
     const mod = (await loader()) as { verifyBoard: (b: Board) => Promise<VerificationData> }
-    const result = await mod.verifyBoard(getStudio().board)
+    const result = await mod.verifyBoard(board)
+    if (!isCurrent()) return
     setStudio({ verification: result })
     return result
   } catch (e) {
+    if (!isCurrent()) return
     const fallback: VerificationData = {
       status: 'failed',
       theorems: [],
@@ -77,6 +81,7 @@ async function runBoardDesignChecks() {
 }
 
 async function runAiBoardRepair(): Promise<{ repaired: boolean; rationale: string }> {
+  const isCurrent = beginDesignRequest()
   const current = getStudio().board
   const prevVer = getStudio().verification
   const prevSys = getStudio().system
@@ -92,6 +97,7 @@ async function runAiBoardRepair(): Promise<{ repaired: boolean; rationale: strin
     verification?: VerificationData
     error?: string
   }
+  if (!isCurrent()) return { repaired: false, rationale: 'Discarded obsolete AI fix; design changed.' }
   if (!res.ok || data.error || !data.board || !data.verification) {
     throw new Error(data.error ?? `AI fix failed (HTTP ${res.status})`)
   }
@@ -612,6 +618,10 @@ function CopilotBar() {
   const runGenerate = async (override?: string) => {
     const promptStr = (override ?? text).trim()
     if (!promptStr || busy) return
+    const isCurrent = beginDesignRequest()
+    const prev = getStudio().board
+    const prevVer = getStudio().verification
+    const prevSys = getStudio().system
     setPromptOpen(true)
     setBusy(true)
     setError(null)
@@ -620,12 +630,10 @@ function CopilotBar() {
       const loader = aiModules['./ai/generate.ts']
       if (!loader) throw new Error('AI generation service unavailable')
       const mod = (await loader()) as { generateBoard: (p: string, on: (e: { type: string; stage?: string; message?: string }) => void) => Promise<Board> }
-      const prev = getStudio().board
-      const prevVer = getStudio().verification
-      const prevSys = getStudio().system
       const nextBoard = await mod.generateBoard(promptStr, (e) => {
-        if (e.type === 'stage') setLog((l) => [...l.slice(-4), { stage: e.stage ?? '', message: e.message ?? '' }])
+        if (isCurrent() && e.type === 'stage') setLog((l) => [...l.slice(-4), { stage: e.stage ?? '', message: e.message ?? '' }])
       })
+      if (!isCurrent()) return
       setStudio((s) => ({
         history: [
           ...s.history.slice(-19),
@@ -653,7 +661,7 @@ function CopilotBar() {
       setPromptOpen(false)
       requestFit()
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      if (isCurrent()) setError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
