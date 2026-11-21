@@ -59,5 +59,9 @@ try {
   s.undoLastEdit()
   assert.deepEqual(s.getStudio().board, initial.board)
   assert.equal(s.getStudio().verification.status, 'passed')
+  s.setStudio({ verification: { status: 'running', theorems: [] } })
+  s.commitBoardEdit(b => { b.width++ }, 'edit during check')
+  s.undoLastEdit()
+  assert.equal(s.getStudio().verification.status, 'idle', 'undo must not revive an abandoned running check')
   console.log(`PASS ${count} delayed-response cases (including current success/failure); invalidation and certified undo`)
 } finally { await server.close() }
