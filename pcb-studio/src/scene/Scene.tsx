@@ -303,6 +303,7 @@ function CameraRig({ board, root }: { board: Board; root: React.RefObject<THREE.
   const fitNonce = useStudio((s) => s.fitNonce)
   const selected = useStudio((s) => s.selected)
   const intro = useRef(true)
+  const lastView = useRef(view)
   const size = Math.max(board.width, board.height)
 
   useEffect(() => {
@@ -327,6 +328,8 @@ function CameraRig({ board, root }: { board: Board; root: React.RefObject<THREE.
   useEffect(() => {
     const c = controls.current
     if (!c || intro.current) return
+    if (lastView.current === view) return
+    lastView.current = view
     setStudio({ touring: false })
     if (view === 'top') c.setLookAt(0, size * 1.6, 0.001, 0, 0, 0, true)
     else if (view === 'bottom') c.setLookAt(0, -size * 1.6, 0.001, 0, 0, 0, true)

@@ -513,7 +513,7 @@ export function buildCertificate(board: Board): Certificate {
 
   const nPins = board.nets.reduce((a, n) => a + n.path.length, 0)
   thm('every_net_connected',
-    `Each of the ${board.nets.length} routed connections reaches all its pins (${nPins} pin visits): a vertex of its trace lies inside every listed pin's pad`,
+    `Each of the ${board.nets.length} routed connections reaches all its pins (${nPins} pin visits): a vertex of its trace lies inside every listed pin's pad. Per connection, not per net: nets split into copper islands are reported as warnings`,
     'Rules.NetsConnected board', via('NetsConnected'))
 
   const aliased = Object.entries(NET_ALIASES).filter(([k]) => board.nets.some((n) => n.name === k))

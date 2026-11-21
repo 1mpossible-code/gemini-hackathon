@@ -214,9 +214,11 @@ function Prompt() {
     try {
       const loader = aiModules['./ai/generate.ts']
       if (!loader) throw new Error('Generation service not installed')
-      const mod = (await loader()) as { generateBoard: (p: string, on: (e: GenLog) => void) => Promise<Board> }
-      const board = await mod.generateBoard(text, (e) => setLog((l) => [...l.slice(-5), e]))
-      setStudio({ board, selected: board.parts.find((p) => p.major)?.ref ?? null, exploded: false, verification: { status: 'idle', theorems: [] } })
+      const mod = (await loader()) as { generateBoard: (p: string, on: (e: { type: string; stage?: string; message?: string }) => void) => Promise<Board> }
+      const board = await mod.generateBoard(text, (e) => {
+        if (e.type === 'stage') setLog((l) => [...l.slice(-5), { stage: e.stage ?? '', message: e.message ?? '' }])
+      })
+      setStudio({ board, selected: null, exploded: false, touring: true, verification: { status: 'idle', theorems: [] } })
       requestFit()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))

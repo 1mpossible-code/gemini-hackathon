@@ -463,7 +463,10 @@ def lines (b : Board) : List String := Id.run do
         if s.net ≠ t.net ∧ s.layer = t.layer ∧ segClear s t (Rules.clearReq b s t) = false then
           some s!"trace_clearance|{s.net} {showPt s.a}-{showPt s.b} vs {t.net} {showPt t.a}-{showPt t.b} ({repr s.layer})"
         else none) ++ segPairs rest
-  out := out ++ (segPairs b.segs).take 20
+  let sv := segPairs b.segs
+  unless sv.isEmpty do
+    out := out ++ [s!"trace_clearance|{sv.length} same-layer segment pairs of different nets closer than {b.rules.minClear}µm edge-to-edge (first 20 follow)"]
+  out := out ++ sv.take 20
   for c in b.conns do
     for pr in c.pins do
       let ok := b.parts.any fun p => decide (p.ref = pr.ref) && p.pads.any fun d =>
@@ -474,6 +477,16 @@ def lines (b : Board) : List String := Id.run do
       for pr in c₁.pins do
         if pr ∈ c₂.pins ∧ c₁.net ≠ c₂.net ∧ c₁.net < c₂.net then
           out := out ++ [s!"no_pin_in_two_nets|{pr.ref}.{pr.pin} in {c₁.net} and {c₂.net}"]
+  -- copper islands per net name (connections joined when they share a pin)
+  let names := b.conns.foldl (fun acc c => if acc.contains c.net then acc else acc ++ [c.net]) []
+  for n in names do
+    let mut comps : List (List PinRef) := []
+    for c in b.conns.filter (·.net == n) do
+      let (hit, miss) := comps.partition fun comp => comp.any (c.pins.contains ·)
+      comps := (hit.flatten ++ c.pins) :: miss
+    if comps.length > 1 then
+      let desc := comps.map fun comp => "{" ++ ", ".intercalate (comp.eraseDups.map fun p => s!"{p.ref}.{p.pin}") ++ "}"
+      out := out ++ [s!"warning|net {n} has {comps.length} copper islands: {" ".intercalate desc}"]
   for r in b.regs do
     let t := totalPeak (b.loadsOn r.outRail)
     out := out ++ [s!"info|power {r.outRail} peak {t} mA, avg {totalAvg (b.loadsOn r.outRail)} mA"]
