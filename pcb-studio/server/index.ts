@@ -3,6 +3,7 @@ import { join, resolve } from 'node:path'
 import { loadEnv, runnerImport, type Plugin } from 'vite'
 import { callGemini, MODELS, resolveApiKey, type GeminiUsage } from './gemini.ts'
 import { readJson, sendJson } from './http.ts'
+import { chassisHandler } from './chassis.ts'
 
 /**
  * Vite dev + preview middleware for AI board generation.
@@ -135,6 +136,7 @@ export function forgeAi(): Plugin {
     configureServer(server) {
       const log = (m: string) => server.config.logger.info(`[forge-ai] ${m}`, { timestamp: true })
       server.middlewares.use('/api/generate', makeHandler(() => server.ssrLoadModule(PIPELINE) as Promise<PipelineModule>, log))
+      server.middlewares.use('/api/chassis', chassisHandler(() => env, log))
     },
     configurePreviewServer(server) {
       const log = (m: string) => server.config.logger.info(`[forge-ai] ${m}`, { timestamp: true })
@@ -147,6 +149,7 @@ export function forgeAi(): Plugin {
           resolve: { alias: { '@': join(root, 'src') } },
         }).then((r) => r.module))
       server.middlewares.use('/api/generate', makeHandler(load, log))
+      server.middlewares.use('/api/chassis', chassisHandler(() => env, log))
     },
   }
 }

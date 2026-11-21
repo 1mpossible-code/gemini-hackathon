@@ -21,8 +21,9 @@ import { Tip, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { ResearchPane } from '@/components/Research'
 import { ScaleSwitch, ScaleTransition, SystemInspector, SystemLibrary } from '@/components/SystemPanels'
-import { DEMO_BRIEFS, systemCost, systemFromPrompt } from '@/data/system'
+import { DEMO_BRIEFS, systemCost, systemFromPrompt, type SystemDesign } from '@/data/system'
 import { storedGeminiKey, storeGeminiKey } from '@/ai/generate'
+import { firmwareFor, isController } from '@/data/firmware'
 
 const ease = [0.16, 1, 0.3, 1] as const
 
@@ -274,7 +275,18 @@ function Prompt() {
     if (!text_.trim() || busy) return
     setBusy(true); setError(null); setLog([])
     // The off-board system follows the brief right away, even before the board arrives.
-    setStudio({ system: systemFromPrompt(text_), selected: null, device: null })
+    const drafted = systemFromPrompt(text_)
+    setStudio({ system: drafted, selected: null, device: null })
+    // The server can also supply the Gemini key; keep the draft if generation fails.
+    {
+      const layout = `PCB height above origin: ${drafted.pcbHeight} mm.\nDevices:\n` + drafted.devices.map((d) => `- ${d.label} at x=${d.x}, z=${d.z}`).join('\n')
+      void fetch('/api/chassis', { method: 'POST', headers: { 'content-type': 'application/json', 'x-gemini-key': storedGeminiKey() }, body: JSON.stringify({ prompt: text_, layout }) })
+        .then((r) => r.json())
+        .then((j: { parts?: SystemDesign['structure'] }) => {
+          if (j.parts?.length && getStudio().system.name === drafted.name) setStudio({ system: { ...getStudio().system, form: 'none', structure: j.parts } })
+        })
+        .catch(() => {})
+    }
     try {
       const loader = aiModules['./ai/generate.ts']
       if (!loader) throw new Error('Generation service not installed')
@@ -365,6 +377,28 @@ function Prompt() {
   )
 }
 
+function Firmware({ part }: { part: Part }) {
+  const board = useStudio((s) => s.board)
+  const code = useMemo(() => firmwareFor(board, part), [board, part])
+  const [copied, setCopied] = useState(false)
+  return (
+    <div className="space-y-1.5">
+      <div className="flex items-center justify-between">
+        <span className="label-mono">Firmware · Arduino C++</span>
+        <Button
+          size="sm"
+          variant="secondary"
+          className="h-6 px-2 text-[11px]"
+          onClick={() => { void navigator.clipboard?.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500) }) }}
+        >
+          {copied ? 'Copied' : 'Copy'}
+        </Button>
+      </div>
+      <pre className="max-h-72 overflow-auto rounded-md border border-border bg-black/40 p-2 font-mono text-[10.5px] leading-relaxed text-foreground/90">{code}</pre>
+    </div>
+  )
+}
+
 function PartEditor({ part }: { part: Part }) {
   const [searching, setSearching] = useState(false)
   const shopEntry = useStudio((s) => s.shopByMpn[part.mpn])
@@ -435,6 +469,8 @@ function PartEditor({ part }: { part: Part }) {
           />
         </label>
       </div>
+
+      {isController(part) && <Firmware part={part} />}
 
       <div className="flex items-center justify-between pt-1">
         <span className="label-mono">Live Procurement</span>

@@ -300,7 +300,7 @@ function SystemOverview() {
     <div className="p-4">
       <div className="label-mono">System</div>
       <h2 className="mt-1 text-base font-semibold tracking-tight">{sys.name}</h2>
-      <p className="mt-1 text-xs text-muted-foreground">{sys.form === 'band' ? 'Band' : 'Chassis'} {sys.chassis.w}×{sys.chassis.d} mm · {sys.devices.length} devices on {board.name}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{sys.form === 'band' ? 'Band' : sys.form === 'none' ? 'Frame' : 'Chassis'} {sys.chassis.w}×{sys.chassis.d} mm · {sys.devices.length} devices on {board.name}</p>
       <div className="mt-4 grid grid-cols-3 gap-px overflow-hidden rounded-lg border border-border bg-border text-xs">
         {[
           ['Devices', usd(total)],

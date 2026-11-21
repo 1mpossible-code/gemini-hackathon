@@ -34,7 +34,7 @@ export interface SystemDevice {
 export interface SystemDesign {
   name: string
   /** plate: flat chassis (rovers, enclosures). band: wrist strap for wearables. */
-  form?: 'plate' | 'band'
+  form?: 'plate' | 'band' | 'none'
   chassis: { w: number; d: number; t: number }
   pcbHeight: number // standoff height under the custom PCB
   devices: SystemDevice[]
@@ -44,12 +44,14 @@ export interface SystemDesign {
 
 export type PrimMaterial = 'metal' | 'plastic' | 'rubber' | 'carbon' | 'clear'
 export interface Prim {
-  shape: 'box' | 'cyl'
-  /** box: width, height, depth. cyl: radius, height, unused. */
+  shape: 'box' | 'cyl' | 'ring' | 'sphere'
+  /** box: width, height, depth. cyl: radius, height, unused. ring: radius, tube radius, unused (stands upright, facing z). */
   size: [number, number, number]
   pos: [number, number, number]
   /** Rotation about y in degrees. */
   yaw?: number
+  /** Full rotation [x, y, z] in degrees. Wins over yaw. */
+  rot?: [number, number, number]
   mat: PrimMaterial
   /** Spins about y in the viewer (rotors). */
   spin?: boolean
@@ -238,23 +240,63 @@ function airframe(text: string, picks: CatalogItem[]): SystemDesign {
   return { ...base, name: titleFor(text, 'Airframe A1'), structure }
 }
 
-/** Open tray around a mounting plate, with feet, so a bench device reads as a product. */
+const EYEWEAR = /\b(glasses|goggles|spectacles|eyewear|sunglasses|visor|hud)\b/i
+
+/** Spectacle frame: rims, lenses, bridge, hinges and temples, with devices along the temples. */
+function eyewear(text: string, picks: CatalogItem[]): SystemDesign {
+  const base = plate(text, picks.filter((p) => busFor(p) !== 'motor').slice(0, 4))
+  const y = 22, front = 62, r = 27, cx = 34, tx = cx + r + 9
+  const structure: Prim[] = []
+  for (const sx of [-1, 1]) {
+    structure.push({ shape: 'ring', size: [r, 3, 0], pos: [sx * cx, y, front], mat: 'plastic' })
+    structure.push({ shape: 'cyl', size: [r - 2, 1.6, 0], pos: [sx * cx, y, front], mat: 'clear', rot: [90, 0, 0] })
+    structure.push({ shape: 'box', size: [12, 7, 5], pos: [sx * (cx + r + 4), y + 6, front], mat: 'plastic' })
+    structure.push({ shape: 'box', size: [5, 8, 150], pos: [sx * tx, y + 6, front - 77], mat: 'plastic' })
+    structure.push({ shape: 'box', size: [5, 16, 8], pos: [sx * tx, y, front - 152], mat: 'plastic' })
+    structure.push({ shape: 'cyl', size: [3, 6, 0], pos: [sx * 9, y - 10, front - 6], mat: 'rubber' })
+  }
+  structure.push({ shape: 'box', size: [16, 5, 5], pos: [0, y + 8, front], mat: 'plastic' })
+  const devices = base.devices.map((d, i) => {
+    const side = i % 2 ? 1 : -1
+    return { ...d, x: side * (tx + (d.id === 'bat' ? 0 : 10)), z: d.id === 'bat' ? front - 150 : front - 40 - Math.floor(i / 2) * 46, y: y + 10, stand: undefined }
+  })
+  return { ...base, name: titleFor(text, 'Eyewear E1'), form: 'none', chassis: { w: tx * 2, d: 170, t: 0 }, pcbHeight: y - 6, devices, structure }
+}
+
+/**
+ * Enclosure built from the design itself, for any product with no dedicated shape:
+ * walls as tall as the tallest device, a clear lid, corner posts, feet, and a
+ * cable gland on the wall next to each device that sits at the edge.
+ */
 function tray(sys: SystemDesign): SystemDesign {
   const { w, d } = sys.chassis
-  const h = 16
+  const tallest = Math.max(sys.pcbHeight + 14, ...sys.devices.map((v) => (byId[v.catalogId]?.dimensions.thickness ?? 8) + v.y + (v.stand ? byId[v.catalogId]?.dimensions.h ?? 0 : 0)))
+  const h = Math.min(90, Math.ceil(tallest + 8))
+  const wall = 2.4
   const structure: Prim[] = [
-    { shape: 'box', size: [w, h, 2.4], pos: [0, h / 2, -d / 2 + 1.2], mat: 'plastic' },
-    { shape: 'box', size: [w, h, 2.4], pos: [0, h / 2, d / 2 - 1.2], mat: 'plastic' },
-    { shape: 'box', size: [2.4, h, d], pos: [-w / 2 + 1.2, h / 2, 0], mat: 'plastic' },
-    { shape: 'box', size: [2.4, h, d], pos: [w / 2 - 1.2, h / 2, 0], mat: 'plastic' },
+    { shape: 'box', size: [w, h, wall], pos: [0, h / 2, -d / 2 + wall / 2], mat: 'plastic' },
+    { shape: 'box', size: [w, h, wall], pos: [0, h / 2, d / 2 - wall / 2], mat: 'plastic' },
+    { shape: 'box', size: [wall, h, d], pos: [-w / 2 + wall / 2, h / 2, 0], mat: 'plastic' },
+    { shape: 'box', size: [wall, h, d], pos: [w / 2 - wall / 2, h / 2, 0], mat: 'plastic' },
+    { shape: 'box', size: [w, 1.6, d], pos: [0, h + 0.8, 0], mat: 'clear' },
   ]
-  for (const sx of [-1, 1]) for (const sz of [-1, 1]) structure.push({ shape: 'cyl', size: [7, 6, 0], pos: [sx * (w / 2 - 14), -6, sz * (d / 2 - 14)], mat: 'rubber' })
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+    structure.push({ shape: 'cyl', size: [7, 6, 0], pos: [sx * (w / 2 - 14), -6, sz * (d / 2 - 14)], mat: 'rubber' })
+    structure.push({ shape: 'cyl', size: [3.2, h, 0], pos: [sx * (w / 2 - 7), h / 2, sz * (d / 2 - 7)], mat: 'metal' })
+    structure.push({ shape: 'cyl', size: [2.2, 1.2, 0], pos: [sx * (w / 2 - 7), h + 2.2, sz * (d / 2 - 7)], mat: 'metal' })
+  }
+  for (const v of sys.devices) {
+    const side = v.x < 0 ? -1 : 1
+    if (Math.abs(v.x) < w / 2 - 30) continue
+    structure.push({ shape: 'cyl', size: [5, 9, 0], pos: [side * (w / 2 + 2), Math.min(h - 8, v.y + 8), v.z], rot: [0, 0, 90], mat: 'metal' })
+  }
   return { ...sys, structure }
 }
 
 export function systemFromPrompt(text: string): SystemDesign {
   const picks = devicesForBrief(text)
   if (FLYER.test(text)) return airframe(text, picks)
+  if (EYEWEAR.test(text)) return eyewear(text, picks)
   if (VEHICLE.test(text) && !WEARABLE.test(text)) {
     const roverTags = new Set(defaultSystem.devices.flatMap((d) => byId[d.catalogId]?.tags ?? []).filter((t) => !GENERIC_TAGS.has(t)))
     const extra = picks.filter((p) => busFor(p) !== 'motor' && !p.tags.some((t) => roverTags.has(t))).slice(0, 2)

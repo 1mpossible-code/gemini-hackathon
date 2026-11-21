@@ -131,12 +131,12 @@ function Structure({ prims }: { prims: Prim[] }) {
             if (p.spin) spinners.current[i] = m
           }}
           position={p.pos}
-          rotation={[0, ((p.yaw ?? 0) * Math.PI) / 180, 0]}
+          rotation={p.rot ? [(p.rot[0] * Math.PI) / 180, (p.rot[1] * Math.PI) / 180, (p.rot[2] * Math.PI) / 180] : [0, ((p.yaw ?? 0) * Math.PI) / 180, 0]}
           material={PRIM_MAT[p.mat]}
           castShadow
           receiveShadow
         >
-          {p.shape === 'box' ? <boxGeometry args={p.size} /> : <cylinderGeometry args={[p.size[0], p.size[0], p.size[1], 28]} />}
+          {p.shape === 'box' ? <boxGeometry args={p.size} /> : p.shape === 'ring' ? <torusGeometry args={[p.size[0], p.size[1], 14, 48]} /> : p.shape === 'sphere' ? <sphereGeometry args={[p.size[0], 32, 20]} /> : <cylinderGeometry args={[p.size[0], p.size[0], p.size[1], 28]} />}
         </mesh>
       ))}
     </group>
@@ -538,7 +538,7 @@ export function SystemRoot() {
   return (
     <>
       <group name="pcb-root" ref={root} onPointerMissed={() => setStudio({ device: null })}>
-        <Chassis sys={sys} />
+        {sys.form !== 'none' && <Chassis sys={sys} />}
         {sys.structure && <Structure prims={sys.structure} />}
         <Pcb sys={sys} />
         {sys.devices.map((d, i) => (
