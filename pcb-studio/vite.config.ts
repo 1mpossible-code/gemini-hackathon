@@ -4,11 +4,13 @@ import { defineConfig } from 'vite'
 import { fileURLToPath, URL } from 'node:url'
 import { forgeAi } from './server/index.ts'
 import { verifyPlugin } from './server/verify.ts'
+import { shopPlugin } from './server/shop.ts'
+import { repairPlugin } from './server/repair.ts'
 
 const RESEARCH = process.env.FORGE_RESEARCH_URL ?? 'http://127.0.0.1:8000'
 
 export default defineConfig({
-  plugins: [react(), tailwindcss(), forgeAi(), verifyPlugin()],
+  plugins: [react(), tailwindcss(), forgeAi(), verifyPlugin(), shopPlugin(), repairPlugin()],
   // The research swarm (forge_research FastAPI) runs on :8000. Its page is shown in the
   // Research tab under /research; its own /api and /static paths are forwarded too.
   // /api/generate and /api/verify are served by the plugins above and never reach it.

@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { loadEnv, runnerImport, type Plugin } from 'vite'
 import { callGemini, MODELS, resolveApiKey, type GeminiUsage } from './gemini.ts'
 
@@ -135,7 +135,9 @@ export function forgeAi(): Plugin {
     name: 'forge-ai',
     configResolved(config) {
       root = config.root
-      env = { ...loadEnv(config.mode, config.envDir || config.root, ['GEMINI_']), ...process.env }
+      const parentEnv = loadEnv(config.mode, resolve(config.root, '..'), ['GEMINI_'])
+      const localEnv = loadEnv(config.mode, config.envDir || config.root, ['GEMINI_'])
+      env = { ...parentEnv, ...localEnv, ...process.env }
     },
     configureServer(server) {
       const log = (m: string) => server.config.logger.info(`[forge-ai] ${m}`, { timestamp: true })

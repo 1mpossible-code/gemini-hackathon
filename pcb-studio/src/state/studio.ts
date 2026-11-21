@@ -1,10 +1,45 @@
 import { useSyncExternalStore } from 'react'
 import { board as defaultBoard, type Board } from '@/data/board'
 import { defaultSystem, type SystemDesign } from '@/data/system'
+import type { Verification } from '@/verify/types'
 
 export type ViewMode = '3d' | 'top' | 'bottom'
 export type Scale = 'board' | 'system'
 export type ExportFormat = 'stl' | 'glb' | 'obj' | 'png' | 'json'
+export type OfferMatchKind = 'exact_match' | 'bundle_or_pack' | 'variant_or_accessory'
+
+export interface ShopOffer {
+  offerId: string
+  productId: string
+  variantId: string
+  title: string
+  sellerName: string
+  sellerDomain: string
+  priceMinor: number
+  currency: string
+  formattedPrice: string
+  priceUsd: number | null
+  available: boolean
+  url: string
+  matchKind: OfferMatchKind
+  matchNote: string
+}
+
+export interface ShopSearchEntry {
+  mpn: string
+  query: string
+  status: 'ok' | 'no_results' | 'error'
+  offers: ShopOffer[]
+  warnings: string[]
+  error?: string
+  retrievedAt: string
+}
+
+export interface HistoryEntry {
+  board: Board
+  verification: Verification
+  label: string
+}
 
 export interface StudioState {
   scale: Scale // 'system' = whole assembly, 'board' = the custom PCB
@@ -14,7 +49,13 @@ export interface StudioState {
   device: string | null // selected system device id
   hoveredDevice: string | null
   board: Board // the board being viewed/edited; AI generation replaces it
-  verification: { status: 'idle' | 'running' | 'passed' | 'failed'; theorems: { name: string; statement: string; ok: boolean }[]; log?: string } 
+  verification: Verification
+  history: HistoryEntry[]
+  lastDiff: string[]
+  budgetUsd: number | null
+  shopByMpn: Record<string, ShopSearchEntry>
+  selectedOfferByMpn: Record<string, ShopOffer>
+  inspectorTab: 'inspect' | 'bom'
   selected: string | null // part ref, e.g. "U1"
   hovered: string | null
   hoveredNet: string | null
@@ -36,6 +77,31 @@ function briefFromUrl(): string | null {
   return parts ? `${brief} Build it around: ${parts}.` : brief
 }
 
+function nextRevision(rev: string): string {
+  const m = /^(.*?)(\d+)$/.exec(rev)
+  if (m) return `${m[1]}${Number(m[2]) + 1}`
+  return `${rev}.1`
+}
+
+export function computeBoardBomCost(
+  b: Board,
+  selectedOfferByMpn: Record<string, ShopOffer> = {},
+): { totalUsd: number; unpricedCount: number } {
+  let total = 0
+  let unpriced = 0
+  for (const p of b.parts) {
+    const offer = selectedOfferByMpn[p.mpn]
+    if (offer && offer.matchKind === 'exact_match' && offer.available && offer.priceUsd != null) {
+      total += offer.priceUsd
+    } else if (p.pricing?.[0]?.price != null) {
+      total += p.pricing[0].price
+    } else {
+      unpriced++
+    }
+  }
+  return { totalUsd: +total.toFixed(4), unpricedCount: unpriced }
+}
+
 let state: StudioState = {
   scale: new URLSearchParams(location.search).get('scale') === 'board' || new URLSearchParams(location.search).has('brief') ? 'board' : 'system',
   mode: new URLSearchParams(location.search).get('mode') === 'research' ? 'research' : 'engineer',
@@ -45,6 +111,12 @@ let state: StudioState = {
   hoveredDevice: null,
   board: defaultBoard,
   verification: { status: 'idle', theorems: [] },
+  history: [],
+  lastDiff: [],
+  budgetUsd: 15,
+  shopByMpn: {},
+  selectedOfferByMpn: {},
+  inspectorTab: 'inspect',
   selected: 'U1',
   hovered: null,
   hoveredNet: null,
@@ -64,6 +136,56 @@ export function setStudio(patch: Partial<StudioState> | ((s: StudioState) => Par
   const next = typeof patch === 'function' ? patch(state) : patch
   state = { ...state, ...next }
   listeners.forEach((l) => l())
+}
+
+export function commitBoardEdit(
+  updater: (draft: Board) => void,
+  label: string,
+  nextVerification?: Verification,
+) {
+  const prev = state.board
+  const draft: Board = JSON.parse(JSON.stringify(prev))
+  updater(draft)
+  draft.revision = nextRevision(prev.revision)
+
+  const prevCost = computeBoardBomCost(prev, state.selectedOfferByMpn).totalUsd
+  const nextCost = computeBoardBomCost(draft, state.selectedOfferByMpn).totalUsd
+  const costDelta = +(nextCost - prevCost).toFixed(2)
+
+  const diffs: string[] = [label]
+  if (prev.width !== draft.width || prev.height !== draft.height) {
+    diffs.push(`Outline ${prev.width}×${prev.height} → ${draft.width}×${draft.height} mm`)
+  }
+  if (Math.abs(costDelta) >= 0.01) {
+    diffs.push(`BOM ${costDelta > 0 ? '+' : '-'}$${Math.abs(costDelta).toFixed(2)}`)
+  } else {
+    diffs.push('Hardware BOM unchanged')
+  }
+  if (!nextVerification && state.verification.status !== 'idle') {
+    diffs.push('Proofs invalidated — re-verify')
+  } else if (nextVerification?.status === 'passed') {
+    diffs.push('Lean 4 proofs ✓')
+  }
+
+  setStudio({
+    history: [...state.history.slice(-19), { board: prev, verification: state.verification, label }],
+    board: draft,
+    verification: nextVerification ?? { status: 'idle', theorems: [] },
+    lastDiff: diffs,
+    touring: false,
+  })
+}
+
+export function undoBoardEdit() {
+  if (!state.history.length) return
+  const last = state.history[state.history.length - 1]
+  setStudio({
+    board: last.board,
+    verification: last.verification,
+    history: state.history.slice(0, -1),
+    lastDiff: [`Reverted: ${last.label}`],
+    touring: false,
+  })
 }
 
 export function getStudio() {

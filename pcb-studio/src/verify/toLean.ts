@@ -217,7 +217,7 @@ export function buildCertificate(board: Board): Certificate {
   const powerNets = (p: Part, pins?: number[]) => partNets(p, pins).filter((n) => railSpec(n))
 
   const usedRails = new Map<string, RailSpec>()
-  const useRail = (name: string) => {
+  const trackRail = (name: string) => {
     const r = railSpec(name)
     if (r) {
       usedRails.set(name, r)
@@ -246,7 +246,7 @@ export function buildCertificate(board: Board): Certificate {
         }
         if (!rail) continue
         roles.set(s.role, rail)
-        if (!useRail(rail)) continue
+        if (!trackRail(rail)) continue
         supplies.push({ ref: p.ref, role: s.role, rail, minMv: s.minMv, maxMv: s.maxMv })
         if (s.peakMa) loads.push({ ref: p.ref, rail, peakMa: s.peakMa, avgMa: s.avgMa ?? s.peakMa })
       }
@@ -255,7 +255,7 @@ export function buildCertificate(board: Board): Certificate {
       const m = /(\d+(?:\.\d+)?)\s*V\b/.exec(p.description)
       const rating = m ? Math.round(Number(m[1]) * 1000) : null
       for (const rail of powerNets(p)) {
-        useRail(rail)
+        trackRail(rail)
         if (rating == null) {
           note(`${p.ref}: no voltage rating in description; not checked`)
           continue
@@ -293,15 +293,15 @@ export function buildCertificate(board: Board): Certificate {
     const gpio = srcNets.flatMap((n) => n.path).map((s) => partBy.get(s.split('.')[0])).find((p) => p && specFor(p)?.logic?.drives)
     if (rail) {
       src = rail
-      srcMaxMv = useRail(rail)!.maxMv
+      srcMaxMv = trackRail(rail)!.maxMv
     } else if (gpio) {
       const vcc = railOf.get(gpio.ref)?.get(specFor(gpio)!.logic!.role) ?? '+3V3'
       src = `${gpio.ref} GPIO`
-      srcMaxMv = useRail(vcc)!.maxMv
+      srcMaxMv = trackRail(vcc)!.maxMv
       srcMaxUa = LED.gpioMaxUa
     } else {
       src = '+3V3'
-      srcMaxMv = useRail('+3V3')!.maxMv
+      srcMaxMv = trackRail('+3V3')!.maxMv
       note(`${other} (${d.ref} resistor) is not routed in the board data; assumed tied to +3V3`)
     }
     leds.push({ led: d.ref, res: rRef, srcMaxMv, ohms, srcMaxUa, src })
@@ -319,7 +319,7 @@ export function buildCertificate(board: Board): Certificate {
     const ohms = parseOhms(r.value)
     if (!ohms || n1.length + n2.length !== 1) continue
     const rail = [...n1, ...n2][0]
-    const mA = Math.ceil(useRail(rail)!.maxMv / ohms)
+    const mA = Math.ceil(trackRail(rail)!.maxMv / ohms)
     loads.push({ ref: r.ref, rail, peakMa: mA, avgMa: mA })
   }
 
