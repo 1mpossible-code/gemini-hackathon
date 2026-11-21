@@ -6,6 +6,7 @@ import {
   ShoppingBag, Sparkles, Tag, Undo2, Wrench, X,
 } from 'lucide-react'
 import { PcbScene } from '@/scene/Scene'
+import { ConceptScene, generateConcept } from '@/components/Concept'
 import {
   commitBoardEdit, computeBoardBomCost, getStudio, goScale, requestExport, requestFit, setStudio,
   undoBoardEdit, useStudio, type ExportFormat, type ShopOffer, type ShopSearchEntry,
@@ -274,6 +275,7 @@ function Prompt() {
     const text_ = override ?? text
     if (!text_.trim() || busy) return
     setBusy(true); setError(null); setLog([])
+    void generateConcept(text_)
     // The off-board system follows the brief right away, even before the board arrives.
     const drafted = systemFromPrompt(text_)
     setStudio({ system: drafted, selected: null, device: null })
@@ -952,6 +954,9 @@ function StatusBar() {
 export default function App() {
   const scale = useStudio((s) => s.scale)
   const mode = useStudio((s) => s.mode)
+  const conceptUrl = useStudio((s) => s.conceptUrl)
+  const conceptStatus = useStudio((s) => s.conceptStatus)
+  const conceptError = useStudio((s) => s.conceptError)
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === 'INPUT') return
@@ -978,8 +983,13 @@ export default function App() {
             transition={{ duration: 1.2, ease }}
             className="relative min-w-0 flex-1"
           >
-            <PcbScene />
+            {scale === 'system' && conceptUrl ? <ConceptScene url={conceptUrl} /> : <PcbScene />}
             <Prompt />
+            {(conceptStatus || conceptError || conceptUrl) && scale === 'system' && <div className="absolute bottom-12 left-4 z-10 max-w-md rounded-lg border border-border bg-background/90 px-3 py-2 text-xs shadow-lg" role="status">
+              {conceptStatus && <p>{conceptStatus} {conceptUrl && <a className="ml-2 underline" href={conceptUrl} download="forge-concept.glb">Download GLB</a>}</p>}
+              {conceptError && <p className="mt-1 text-amber-300">{conceptError}</p>}
+              {conceptUrl && <p className="mt-1 text-muted-foreground">Visual concept · drag to rotate · not a verified engineering model</p>}
+            </div>}
             <Toolbar />
             <ScaleTransition />
           </motion.main>

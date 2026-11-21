@@ -20,6 +20,9 @@ export interface StudioState {
   scale: Scale // 'system' = whole assembly, 'board' = the custom PCB
   mode: 'research' | 'engineer' // research swarm (friend's FastAPI app) or the PCB studio
   pendingPrompt: string | null // board brief waiting for the Gemini prompt bar to run
+  conceptUrl: string | null
+  conceptStatus: string
+  conceptError: string | null
   system: SystemDesign
   device: string | null // selected system device id
   hoveredDevice: string | null
@@ -81,6 +84,9 @@ let state: StudioState = {
   scale: new URLSearchParams(location.search).get('scale') === 'board' ? 'board' : 'system',
   mode: new URLSearchParams(location.search).get('mode') === 'engineer' || new URLSearchParams(location.search).has('brief') ? 'engineer' : 'research',
   pendingPrompt: briefFromUrl(),
+  conceptUrl: null,
+  conceptStatus: '',
+  conceptError: null,
   system: briefFromUrl() ? systemFromPrompt(briefFromUrl()!) : defaultSystem,
   device: null,
   hoveredDevice: null,
