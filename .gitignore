@@ -4,3 +4,4 @@
 __pycache__/
 .playwright-cli/
 .ruff_cache/
+.ref-stcb/

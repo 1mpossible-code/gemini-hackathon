@@ -1,0 +1,6 @@
+name = "forge"
+defaultTargets = ["Forge"]
+
+# Core Lean 4 only (no Mathlib): everything is decidable integer arithmetic.
+[[lean_lib]]
+name = "Forge"
