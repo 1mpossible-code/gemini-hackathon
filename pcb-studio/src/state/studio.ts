@@ -233,6 +233,20 @@ function snapshotHistory(label: string): HistoryEntry {
   }
 }
 
+export function loadExampleBoard(board: Board) {
+  setStudio({
+    history: [...state.history.slice(-19), snapshotHistory('Load example board')],
+    board,
+    verification: { status: 'idle', theorems: [] },
+    scale: 'board',
+    mode: 'engineer',
+    view: 'top',
+    selected: null,
+    touring: false,
+    fitNonce: state.fitNonce + 1,
+  })
+}
+
 export function commitSystemSwap(
   deviceId: string,
   catalogId: string,

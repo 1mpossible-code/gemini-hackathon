@@ -182,7 +182,7 @@ const REPAIR_MODELS: Record<string, string> = {
 }
 
 function resolveRepairModel(requested: unknown, env: Record<string, string | undefined>): string | null {
-  const raw = typeof requested === 'string' && requested.trim() ? requested.trim() : (env.GEMINI_REPAIR_MODEL?.trim() || 'neon')
+  const raw = typeof requested === 'string' && requested.trim() ? requested.trim() : (env.GEMINI_REPAIR_MODEL?.trim() || 'hydrogen')
   return Object.hasOwn(REPAIR_MODELS, raw) ? REPAIR_MODELS[raw] : null
 }
 

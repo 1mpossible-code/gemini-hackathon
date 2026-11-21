@@ -1,4 +1,6 @@
-# Final integration (routing pending)
+# Initial integration (historical: routing was pending)
+
+Routing is now integrated; see [FINAL-DEMO.md](FINAL-DEMO.md) for current acceptance evidence and startup instructions.
 
 Branch: `integration/final`, based on the combined `ux/post-merge-refinement` history (`dc858ce`). No merge conflicts occurred; no functionality was discarded.
 

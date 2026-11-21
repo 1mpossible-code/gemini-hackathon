@@ -9,10 +9,11 @@ import {
 import { PcbScene } from '@/scene/Scene'
 import {
   commitBoardEdit, commitSystemSwap, computeBoardBomCost, computeSystemDevicesCost,
-  beginDesignRequest, cycleLabelMode, getStudio, requestExport, requestFit, setStudio, undoLastEdit, useStudio,
+  beginDesignRequest, cycleLabelMode, getStudio, loadExampleBoard, requestExport, requestFit, setStudio, undoLastEdit, useStudio,
   type ExportFormat, type ShopOffer, type ShopSearchEntry,
 } from '@/state/studio'
-import type { Board, Part } from '@/data/board'
+import { board as roverBoard, type Board, type Part } from '@/data/board'
+import { buildTelemetryDemoBoard } from '@/data/repairDemo'
 import { byId } from '@/data/catalog'
 import { alternativesFor, analyzeDevice, analyzeSystem, unitPrice } from '@/data/system'
 import type { Verification as VerificationData } from '@/verify/types'
@@ -159,7 +160,7 @@ function TopBar() {
       ? { label: 'Checking changes…', tone: 'muted' as const }
       : totalIssues > 0
       ? { label: `${totalIssues} ${totalIssues === 1 ? 'issue' : 'issues'} need attention`, tone: 'warn' as const }
-      : v.status === 'passed' && health.unverifiedCount === 0
+      : v.status === 'passed' && (scale === 'board' || health.unverifiedCount === 0)
       ? { label: 'Design checks passed', tone: 'ok' as const }
       : { label: scale === 'system' ? 'Checks pending' : 'Run design checks', tone: 'muted' as const }
 
@@ -243,6 +244,11 @@ function TopBar() {
             </Button>
           </Tip>
         )}
+        <Button size="sm" variant="ghost" onClick={() => loadExampleBoard(
+          board.name.includes('Telemetry Node') ? structuredClone(roverBoard) : buildTelemetryDemoBoard(),
+        )}>
+          {board.name.includes('Telemetry Node') ? 'Full rover PCB' : 'Repair demo'}
+        </Button>
         <ScaleSwitch />
         <ExportMenu />
       </div>
@@ -1298,6 +1304,7 @@ function Inspector() {
 }
 
 function DesignChecksCard() {
+  const board = useStudio((s) => s.board)
   const v = useStudio((s) => s.verification)
   const [repairing, setRepairing] = useState(false)
   const [repairNote, setRepairNote] = useState<string | null>(null)
@@ -1362,6 +1369,11 @@ function DesignChecksCard() {
           : 'Check spacing, wiring, power budget, and thermal safety.'}
       </p>
 
+      {board.name.includes('Telemetry Node') && (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Small PCB repair demo only — not certification of the full rover. Run Design checks, then Fix with AI.
+        </p>
+      )}
       {repairNote && (
         <p className="mt-2 rounded border border-border bg-muted/40 p-2 text-[11px] text-muted-foreground">{repairNote}</p>
       )}
@@ -1400,7 +1412,7 @@ function StatusBar() {
 
   const boardFailed = v.theorems.filter((t) => !t.ok).length
   const hasWarnings = (scale === 'system' && health.warningCount > 0) || boardFailed > 0
-  const isAllVerified = v.status === 'passed' && health.warningCount === 0 && health.unverifiedCount === 0
+  const isAllVerified = v.status === 'passed' && (scale === 'board' || (health.warningCount === 0 && health.unverifiedCount === 0))
 
   const statusText =
     v.status === 'running'
