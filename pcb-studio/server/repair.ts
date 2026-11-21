@@ -1,7 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import path from 'node:path'
 import { loadEnv, runnerImport, type Plugin } from 'vite'
-import { callGemini, MODELS, resolveApiKey } from './gemini.ts'
+import { callGemini, resolveApiKey } from './gemini.ts'
 import { verifyCertificate } from './verify.ts'
 import type { Certificate } from '../src/verify/types.ts'
 
@@ -147,7 +147,7 @@ function segDistSq(a: [number, number], b: [number, number], c: [number, number]
 
 const canonicalNet = (n: string) => (n === 'VM' ? 'VIN' : n)
 
-function stabilizeGeometryAndClearances(board: BoardData, fp: FootprintMod): string[] {
+export function stabilizeGeometryAndClearances(board: BoardData, fp: FootprintMod): string[] {
   const notes: string[] = []
   const halfW = board.width / 2
   const halfH = board.height / 2
@@ -264,6 +264,48 @@ function stabilizeGeometryAndClearances(board: BoardData, fp: FootprintMod): str
         break
       }
     }
+    // shortcut: bounded local search can stall; use rip-up routing if detours cannot reduce conflicts.
+    // Search both ends of every conflict; one blocked trace must not stop repair.
+    for (let pass = 0; pass < 200 && conflicts.length; pass++) {
+      let improved = false
+      const targets = [...new Set(conflicts.flat())]
+      for (const index of targets) {
+        const target = board.nets[index]
+        const previous = { layer: target.layer, via: target.via }
+        const margin = 1 + (target.width ?? 0.35) / 2
+        const xs = [-halfW + margin, -halfW / 2, 0, halfW / 2, halfW - margin]
+        const ys = [-halfH + margin, -halfH / 2, 0, halfH / 2, halfH - margin]
+        const candidates: (BoardNet['via'])[] = [previous.via, [[0, -28.2]], [[-11, 28.2], [11, 28.2]], [[-31, -24], [-14, -24]], [[-31, 23], [-17, 23]], [[17, 23], [31, 23]], [[-20, -10]], [[20, -10]]]
+        const points = fp.routeNets(board)[index].points
+        const start = points[0]
+        const end = points[points.length - 1]
+        // Escape fine-pitch pads perpendicular to the row before taking a detour.
+        for (const offset of [-2, -1, 1, 2]) {
+          for (const y of ys) candidates.push([[start[0], start[1] + offset], [start[0], y], [end[0], y], [end[0], end[1] + offset]])
+          for (const x of xs) candidates.push([[start[0] + offset, start[1]], [x, start[1]], [x, end[1]], [end[0] + offset, end[1]]])
+        }
+        for (const x of xs) for (const y of ys) candidates.push([[x, y]])
+        for (const y of ys) candidates.push([[-halfW + margin, y], [halfW - margin, y]])
+        for (const x of xs) candidates.push([[x, -halfH + margin], [x, halfH - margin]])
+        for (const layer of ['top', 'bottom'] as const) {
+          for (const via of candidates) {
+            target.layer = layer
+            target.via = via
+            const next = traceConflicts(board)
+            if (next.length >= conflicts.length) continue
+            conflicts = next
+            notes.push(`Rerouted ${target.name} (${target.path.join('→')}) on ${layer}`)
+            improved = true
+            break
+          }
+          if (improved) break
+        }
+        if (improved) break
+        target.layer = previous.layer
+        target.via = previous.via
+      }
+      if (!improved) break
+    }
   }
   return notes
 }
@@ -294,9 +336,6 @@ export function repairPlugin(): Plugin {
         try {
           const body = await readJson(req)
           const inputBoard = body.board as BoardData | undefined
-          const suppliedVerification = body.verification as
-            | { status?: string; theorems?: { name: string; statement: string; ok: boolean; error?: string }[]; diagnostics?: string[] }
-            | undefined
           if (!inputBoard || !Array.isArray(inputBoard.parts) || !Array.isArray(inputBoard.nets)) {
             return sendJson(res, 400, { error: 'expected { board }' })
           }
@@ -306,10 +345,8 @@ export function repairPlugin(): Plugin {
           }
           const fpMod = (await server.ssrLoadModule('/src/pcb/footprint.ts')) as FootprintMod
 
-          const initialVer =
-            suppliedVerification && Array.isArray(suppliedVerification.theorems) && suppliedVerification.theorems.length > 0
-              ? suppliedVerification
-              : await verifyCertificate(toLeanMod.buildCertificate(inputBoard), verifyDir, 60_000)
+          // Never trust a caller's proof: recompute from this exact board and revision.
+          const initialVer = await verifyCertificate(toLeanMod.buildCertificate(inputBoard), verifyDir, 60_000)
           if (initialVer.status === 'passed') {
             return sendJson(res, 200, {
               repaired: true,
@@ -325,11 +362,14 @@ export function repairPlugin(): Plugin {
           const failedTheorems = (initialVer.theorems ?? []).filter((t) => !t.ok)
           const apiKey = resolveApiKey(env)
           let aiRationale = ''
+          let geminiLatencyMs: number | null = null
+          let geminiError: string | null = null
           let actor: 'gemini' | 'deterministic_solver' = 'deterministic_solver'
 
           if (apiKey) {
+            const started = performance.now()
             try {
-              const model = MODELS.carbon
+              const model = 'gemini-4-neon'
               const promptSummary = {
                 boardSize: { width: working.width, height: working.height },
                 failedTheorems: failedTheorems.map((t) => ({ name: t.name, statement: t.statement, error: t.error })),
@@ -351,8 +391,8 @@ export function repairPlugin(): Plugin {
                 prompt: JSON.stringify(promptSummary),
                 schema: REPAIR_SCHEMA,
                 temperature: 0.2,
-                signal: AbortSignal.timeout(12_000),
-                timeoutMs: 12_000,
+                signal: AbortSignal.timeout(60_000),
+                timeoutMs: 60_000,
               })) as {
                 width?: number
                 height?: number
@@ -384,8 +424,10 @@ export function repairPlugin(): Plugin {
                 }
               }
               aiRationale = patch.rationale ?? ''
-            } catch {
-              /* fall through to deterministic routing/bounds repair if Gemini call times out */
+            } catch (error) {
+              geminiError = error instanceof Error ? error.message : String(error)
+            } finally {
+              geminiLatencyMs = Math.round(performance.now() - started)
             }
           }
 
@@ -405,6 +447,7 @@ export function repairPlugin(): Plugin {
             repaired: nextVer.status === 'passed',
             attempts: 1,
             actor,
+            gemini: { model: 'gemini-4-neon', latencyMs: geminiLatencyMs, error: geminiError ?? (apiKey ? null : 'No API key configured') },
             rationale: summaryNotes || 'Adjusted copper layers and clearances and re-verified in Lean 4.',
             board: working,
             verification: nextVer,

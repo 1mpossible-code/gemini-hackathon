@@ -72,7 +72,16 @@ export function parseDiagnostics(log: string): string[] {
 }
 
 /** Run the full pipeline for one certificate. Serialised: lake builds share one directory. */
-export async function verifyCertificate(cert: Certificate, projectDir: string, timeoutMs = BUILD_TIMEOUT_MS): Promise<Verification> {
+const builds = new Map<string, Promise<unknown>>()
+
+export function verifyCertificate(cert: Certificate, projectDir: string, timeoutMs = BUILD_TIMEOUT_MS): Promise<Verification> {
+  const key = path.resolve(projectDir)
+  const job = (builds.get(key) ?? Promise.resolve()).then(() => buildCertificate(cert, key, timeoutMs))
+  builds.set(key, job.catch(() => undefined))
+  return job
+}
+
+async function buildCertificate(cert: Certificate, projectDir: string, timeoutMs: number): Promise<Verification> {
   const t0 = Date.now()
   await mkdir(path.join(projectDir, 'Forge'), { recursive: true })
   await writeFile(path.join(projectDir, 'Forge', 'Generated.lean'), cert.source)
@@ -84,10 +93,11 @@ export async function verifyCertificate(cert: Certificate, projectDir: string, t
   })
   // an error outside every theorem (syntax, model) invalidates the whole certificate
   const stray = errs.filter((x) => !cert.theorems.some((t) => x.line >= t.startLine && x.line <= t.endLine))
-  if (stray.length) theorems.forEach((t) => (t.ok = false))
+  if (stray.length || (code !== 0 && errs.length === 0)) theorems.forEach((t) => (t.ok = false))
   const passed = code === 0 && !timedOut && theorems.every((t) => t.ok)
   return {
     status: passed ? 'passed' : 'failed',
+    certificateSha256: createHash('sha256').update(cert.source).digest('hex'),
     theorems,
     log: (timedOut ? `lake build timed out after ${timeoutMs} ms\n` : '') + out.slice(-20_000),
     durationMs: Date.now() - t0,
