@@ -73,7 +73,7 @@ try {
       assert.ok(result.theorems.some(t => !t.ok), 'default board should expose known design violations')
     } finally { await rm(dir, { recursive: true, force: true }) }
   })
-  await check('KNOWN BUG: delayed verification attaches old certificate to edited board', async () => {
+  await check('delayed verification cannot certify an edited board', async () => {
     // Execute the actual function body, stripping only its TypeScript declarations.
     const app = await readFile(path.join(root, 'src/App.tsx'), 'utf8')
     let body = app.split('async function runBoardDesignChecks() {')[1].split('\nasync function runAiBoardRepair')[0]
@@ -83,17 +83,17 @@ try {
     let release
     const delayed = new Promise(resolve => { release = resolve })
     const modules = { './verify/verify.ts': async () => ({ verifyBoard: () => delayed }) }
-    const run = new Function('setStudio', 'getStudio', 'verifyModules', `return (async () => {${body}})()`)
+    const run = new Function('setStudio', 'getStudio', 'verifyModules', 'beginDesignRequest', `return (async () => {${body}})()`)
     s.setStudio(structuredClone(initial))
-    const job = run(s.setStudio, s.getStudio, modules)
+    const job = run(s.setStudio, s.getStudio, modules, s.beginDesignRequest)
     await new Promise(resolve => setTimeout(resolve, 0))
     s.commitBoardEdit(b => { b.width += 1 }, 'Edit during verification')
     release({ status: 'passed', theorems: [{ name: 'old_board', ok: true }] })
     await job
-    assert.equal(s.getStudio().verification.status, 'passed')
+    assert.equal(s.getStudio().verification.status, 'idle')
+    assert.deepEqual(s.getStudio().verification.theorems, [])
     assert.notEqual(s.getStudio().board.revision, initial.board.revision)
-    console.log('EVIDENCE stale certificate published on', s.getStudio().board.revision)
-    if (process.env.QA_STRICT) assert.fail('Stale verification must be discarded')
+    console.log('EVIDENCE stale certificate discarded on', s.getStudio().board.revision)
   })
   await server.listen()
   const base = server.resolvedUrls.local[0]
