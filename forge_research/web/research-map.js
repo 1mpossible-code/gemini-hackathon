@@ -49,7 +49,7 @@ const WORKERS = [
 ];
 const STATE_LABEL = { pending: "queued", running: "run", completed: "done", skipped: "skip", failed: "fail", stopped: "stop", gate: "await" };
 const LOG_LABEL = { pending: "Queued", running: "Running", completed: "Complete", skipped: "Not run", failed: "Failed", stopped: "Stopped" };
-const OUTCOMES = { candidate: "Candidate accepted", blocked: "Parts did not pass", unsupported: "Outside catalog scope" };
+const OUTCOMES = { candidate: "Candidate accepted", blocked: "Curated parts need review", unsupported: "No curated parts, PCB studio picks them" };
 const TRANSPORT = { ble: "BLE", wifi: "Wi-Fi", wired: "Wired", wireless: "Wireless" };
 const BARS = 20;
 
@@ -164,7 +164,8 @@ function short(value, size = 18) {
   return textValue.length > size ? textValue.slice(0, size - 1) + "…" : textValue;
 }
 function canEngineer() {
-  return !!(report?.review?.selected_parts ?? []).length;
+  // Any finished run can be engineered: the PCB studio designs from the brief alone.
+  return !!report;
 }
 
 const ROWS = {
@@ -633,7 +634,7 @@ export function applyResearchEvent(event) {
   if (stage === "compatibility" && payload?.outcome) {
     summary = OUTCOMES[payload.outcome];
     const hold = payload.outcome !== "candidate";
-    update("hold", hold ? "completed" : "skipped", hold ? summary + ". The research report remains available." : "The candidate cleared the compatibility gate.", null, hold ? summary : "cleared");
+    update("hold", hold ? "completed" : "skipped", hold ? summary + ". The PCB studio continues from the brief." : "The candidate cleared the compatibility gate.", null, hold ? summary : "cleared");
   }
   if (stage === "geometry" && ["skipped", "failed"].includes(status) && state.get("hold").status !== "completed") {
     update("hold", "completed", message || "The prototype could not be built. See the geometry findings.", null, "no model");
@@ -653,9 +654,9 @@ export function finishResearchMap(outcome, message, finalReport) {
   const labels = { completed: "Complete", failed: "Failed", stopped: "Stopped" };
   showStatus(outcome, labels[outcome]);
   $("rg-gate").textContent = ready
-    ? "Design ready. Your call: open the engineering studio or send the parts to the PCB studio."
+    ? "Research done. Sending the brief to the PCB studio."
     : outcome === "completed"
-      ? "Build on hold. The research report is kept for review."
+      ? "Research done. Sending the brief to the PCB studio."
       : message || "The run ended before a design was ready.";
   addLog("chief", "run", (labels[outcome] + (message ? " · " + message : "")) || "The report is ready.");
   if (ready) {
@@ -666,7 +667,7 @@ export function finishResearchMap(outcome, message, finalReport) {
   $("stop-research").hidden = true;
   $("edit-brief").hidden = false;
   $("open-workbench-btn").hidden = !(outcome === "completed" && report?.project);
-  $("engineer-pcb-btn").hidden = !(outcome === "completed" && canEngineer());
+  $("engineer-pcb-btn").hidden = outcome === "stopped";
   renderAll();
   if (stoppedFromButton) $("edit-brief").focus();
 }

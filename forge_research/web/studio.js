@@ -143,19 +143,13 @@ async function startResearch(mode) {
     );
     latestCompletedReport = report;
     finishResearchMap("completed", "", report);
-    const canEngineer = !!(report.review?.selected_parts || []).length;
-    $("#engineer-pcb-btn").hidden = !canEngineer;
-    $("#btn-engineer-pcb").hidden = !canEngineer;
-    if (canEngineer) {
-      // Research is done: hand the chosen parts to the PCB studio.
-      if (report.project) $("#open-workbench-btn").hidden = false;
-      setTimeout(engineerPcb, 2500);
-    } else if (report.project) {
-      $("#open-workbench-btn").hidden = false;
-      await loadProjectIntoWorkbench(report.project, report);
-    } else {
-      renderBlockedReport(report);
-    }
+    // Research never blocks the build. With or without catalog picks, the brief
+    // goes to the PCB studio, which can generate a board for any request.
+    if (!report.brief) report.brief = mode === "sample" ? sampleBrief : value;
+    $("#engineer-pcb-btn").hidden = false;
+    $("#btn-engineer-pcb").hidden = false;
+    if (report.project) $("#open-workbench-btn").hidden = false;
+    setTimeout(engineerPcb, 2500);
   } catch (error) {
     if (researchController.signal.aborted) {
       finishResearchMap("stopped", "Run cancelled. You can edit the brief and try again.");
@@ -165,6 +159,13 @@ async function startResearch(mode) {
           ? "Could not reach FORGE server. Check that uvicorn is running."
           : error.message;
       finishResearchMap("failed", message);
+      // A failed research run still hands the brief over so the board gets built.
+      const brief = mode === "sample" ? sampleBrief : value;
+      if (brief) {
+        latestCompletedReport = { brief, review: { selected_parts: [] } };
+        $("#engineer-pcb-btn").hidden = false;
+        setTimeout(engineerPcb, 2500);
+      }
     }
   } finally {
     researchController = null;
@@ -269,9 +270,8 @@ Promise.all([
     if (sess) {
       if (sess.pcb_url && !sameOriginStudio) pcbUrl = sess.pcb_url;
       connection.dataset.live = String(sess.live);
-      connection.lastElementChild.textContent = sess.live
-        ? `Gemini live (${sess.gemini_model})`
-        : "Gemini offline";
+      connection.hidden = !!sess.live;
+      connection.lastElementChild.textContent = sess.live ? "" : "Offline";
       leanBadge.dataset.ready = String(sess.lean_available);
       leanBadge.textContent = sess.lean_available ? "Lean 4 ready" : "Lean 4 unavailable";
       setLiveGeminiStatus(sess.live);

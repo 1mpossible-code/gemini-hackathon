@@ -190,7 +190,11 @@ async def run_research(
             "Read the requirements {requirements} and the deterministic part review "
             "{catalog_review}. Return a short list of concrete next_steps for an engineer. "
             "Prioritize failed checks and gaps. Do not invent prices, part numbers, or "
-            "validation results. The deterministic findings govern compatibility and cost."
+            "validation results. The deterministic findings govern compatibility and cost. "
+            "When the application is unsupported by the curated catalog, the PCB studio still "
+            "designs the requested product, so never tell the engineer to change the product. "
+            "List what to specify for that product: power source, interfaces, sensors, "
+            "actuators and size."
         ),
         before_agent_callback=audit_proposal,
         output_schema=ReviewNotes,

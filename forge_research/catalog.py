@@ -40,8 +40,11 @@ def review_proposal(
             findings=[
                 Finding(
                     check="catalog_scope",
-                    status="fail",
-                    detail="The catalog supports EMG wearables.",
+                    status="unknown",
+                    detail=(
+                        "The curated research catalog has no reviewed parts for this "
+                        "application. The PCB studio selects parts from its general catalog."
+                    ),
                 )
             ],
         )
