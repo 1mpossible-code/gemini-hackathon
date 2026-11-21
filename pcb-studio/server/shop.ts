@@ -93,35 +93,46 @@ async function callShopMcp(toolName: string, args: Record<string, unknown>): Pro
   return doc
 }
 
-const PACK_RE = /\b(\d+\s*-\s*pack|\d+\s*pcs|\d+\s*pack|kit|bundle|reel|lot\s+of)\b/i
-const ACCESSORY_RE = /\b(case|enclosure|cover|cable\s+only|shield|adapter|book|shirt|shoe|denim|pant)\b/i
+const PACK_RE = /\b(\d+\s*-\s*pack|\d+\s*pcs|\d+\s*pack|pack\s+of|\d+\s*[x×]|[x×]\s*\d+|kit|bundle|reel|lot\s+of)\b/i
+const ACCESSORY_RE = /\b(case|enclosure|cover|cable|shield|adapter|socket|programmer|carrier|book|shirt|shoe|denim|pant)\b/i
+const DEV_BOARD_RE = /(dev\s*board|development\s*board|dev\.?kit|dev\s*kit)/i
+const BREAKOUT_RE = /\bbreakout\b/i
 
-function classifyOffer(mpn: string, name: string, manufacturer: string, title: string): { kind: OfferMatchKind; note: string } | null {
+export function classifyOffer(mpn: string, name: string, manufacturer: string, title: string): { kind: OfferMatchKind; note: string } | null {
   const hay = title.toLowerCase()
-  const cleanMpn = mpn.toLowerCase().replace(/\([^)]*\)/g, '').trim()
+  const cleanMpn = mpn.toLowerCase().trim()
   const baseToken = cleanMpn.split(/[-/]/)[0]
   const nameTokens = `${name} ${manufacturer}`
     .toLowerCase()
     .split(/[^a-z0-9]+/)
     .filter((t) => t.length >= 3 && !['the', 'with', 'and', 'for', 'smd', 'tht', 'module'].includes(t))
 
-  const hasMpn = cleanMpn.length >= 3 && hay.includes(cleanMpn)
+  const identity = cleanMpn.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[-\s]+/g, '[-\\s]*')
+  const hasMpn = cleanMpn.length >= 3 && new RegExp(`(?:^|[^a-z0-9])${identity}(?![a-z0-9-])`, 'i').test(title)
   const hasBase = baseToken.length >= 4 && hay.includes(baseToken)
   const tokenHits = nameTokens.filter((t) => hay.includes(t)).length
 
   if (!hasMpn && !hasBase && tokenHits === 0) return null
   if (/\b(denim|sneaker|pant|jacket|polo|shirt|dress)\b/i.test(hay)) return null
 
-  if (ACCESSORY_RE.test(hay) && !hasMpn) {
+  if (ACCESSORY_RE.test(hay)) {
     return { kind: 'variant_or_accessory', note: 'Accessory or carrier board — not bare component SKU' }
   }
   if (PACK_RE.test(hay)) {
     return { kind: 'bundle_or_pack', note: 'Multi-unit pack or kit — total reflects bundle quantity' }
   }
-  if (hasMpn || (hasBase && tokenHits >= 1)) {
-    return { kind: 'exact_match', note: `Matches ${mpn}` }
+  if (DEV_BOARD_RE.test(hay)) {
+    return { kind: 'variant_or_accessory', note: 'Development board — not a bare component SKU' }
   }
-  return { kind: 'variant_or_accessory', note: 'Related variant or breakout — verify footprint & datasheet' }
+  if (BREAKOUT_RE.test(hay)) {
+    return { kind: 'variant_or_accessory', note: 'Breakout board — not a bare component SKU' }
+  }
+  const variants = hay.match(/\b(?:\d+\s*(?:mb|gb|mbyte)|n\d+(?:r\d+)?|sot[- ]?\d+|qfn[- ]?\d+|lqfp[- ]?\d+)\b/g) ?? []
+  const unknownVariant = variants.some((variant) => !cleanMpn.includes(variant) && !name.toLowerCase().includes(variant))
+  if (hasMpn && !unknownVariant && !/\b(?:compatible|replacement|for|board)\b/i.test(hay)) {
+    return { kind: 'exact_match', note: `Exact product identity ${mpn}; supplier details still require review` }
+  }
+  return { kind: 'variant_or_accessory', note: 'Potential match only — review exact variant, package and footprint; catalog price retained' }
 }
 
 export function shopPlugin(): Plugin {
@@ -167,7 +178,10 @@ export function shopPlugin(): Plugin {
           const avail = Boolean((v.availability as { available?: boolean })?.available)
           if (!variantId || !url.startsWith('http') || typeof price.amount !== 'number') continue
 
-          const classified = classifyOffer(mpn || query, name, manufacturer, title)
+          const variantTitle = String(v.title ?? '').trim()
+          const identityTitle = variantTitle && variantTitle.toLowerCase() !== 'default title'
+            ? `${title} ${variantTitle}` : title
+          const classified = classifyOffer(mpn || query, name, manufacturer, identityTitle)
           if (!classified) continue
 
           const cur = String(price.currency ?? currency).toUpperCase()

@@ -1,8 +1,8 @@
 import { useSyncExternalStore } from 'react'
 import { board as defaultBoard, type Board } from '@/data/board'
 import { defaultSystem, systemFromPrompt, type SystemDesign } from '@/data/system'
-import { findConcept } from '@/data/concepts'
 import type { Verification } from '@/verify/types'
+import { byId } from '@/data/catalog'
 import type { OfferMatchKind, ShopOffer, ShopSearchEntry } from '@/data/shop'
 
 export type { OfferMatchKind, ShopOffer, ShopSearchEntry }
@@ -21,7 +21,6 @@ export interface StudioState {
   scale: Scale // 'system' = whole assembly, 'board' = the custom PCB
   mode: 'research' | 'engineer' // research swarm (friend's FastAPI app) or the PCB studio
   pendingPrompt: string | null // board brief waiting for the Gemini prompt bar to run
-  concept: { label: string; url: string } | null // bundled whole-object model for the brief
   system: SystemDesign
   device: string | null // selected system device id
   hoveredDevice: string | null
@@ -33,6 +32,7 @@ export interface StudioState {
   shopByMpn: Record<string, ShopSearchEntry>
   selectedOfferByMpn: Record<string, ShopOffer>
   inspectorTab: 'inspect' | 'bom'
+  systemTab: 'inspect' | 'bom'
   selected: string | null // part ref, e.g. "U1"
   hovered: string | null
   hoveredNet: string | null
@@ -52,6 +52,30 @@ function briefFromUrl(): string | null {
   if (!brief) return null
   const parts = q.get('parts')
   return (parts ? `${brief} Build it around: ${parts}.` : brief).slice(0, 2000)
+}
+
+export function computeSystemDevicesCost(
+  sys: { devices: { catalogId: string }[] },
+  selectedOfferByMpn: Record<string, ShopOffer> = {},
+): { totalUsd: number; unpricedCount: number } {
+  let total = 0
+  let unpriced = 0
+  for (const d of sys.devices) {
+    const item = byId[d.catalogId]
+    if (!item) {
+      unpriced++
+      continue
+    }
+    const offer = selectedOfferByMpn[item.mpn]
+    if (offer && offer.matchKind === 'exact_match' && offer.available && offer.priceUsd != null) {
+      total += offer.priceUsd
+    } else if (item.pricing[0]?.unit != null) {
+      total += item.pricing[0].unit
+    } else {
+      unpriced++
+    }
+  }
+  return { totalUsd: +total.toFixed(4), unpricedCount: unpriced }
 }
 
 function nextRevision(rev: string): string {
@@ -79,16 +103,12 @@ export function computeBoardBomCost(
   return { totalUsd: +total.toFixed(4), unpricedCount: unpriced }
 }
 
-// The mode survives a reload, so a dev-server restart does not drop you back to research.
-function savedMode(): string | null {
-  try { return sessionStorage.getItem('forge.mode') } catch { return null }
-}
-
 let state: StudioState = {
-  scale: new URLSearchParams(location.search).get('scale') === 'board' ? 'board' : 'system',
-  mode: new URLSearchParams(location.search).get('mode') === 'engineer' || new URLSearchParams(location.search).has('brief') || savedMode() === 'engineer' ? 'engineer' : 'research',
+  scale: 'system',
+  // A fresh load or refresh always starts on the research front page. Only a brief
+  // handed over in the URL opens the studio directly.
+  mode: new URLSearchParams(location.search).has('brief') ? 'engineer' : 'research',
   pendingPrompt: briefFromUrl(),
-  concept: briefFromUrl() ? findConcept(briefFromUrl()!) : null,
   system: briefFromUrl() ? systemFromPrompt(briefFromUrl()!) : defaultSystem,
   device: null,
   hoveredDevice: null,
@@ -100,6 +120,7 @@ let state: StudioState = {
   shopByMpn: {},
   selectedOfferByMpn: {},
   inspectorTab: 'inspect',
+  systemTab: 'inspect',
   selected: 'U1',
   hovered: null,
   hoveredNet: null,
@@ -117,10 +138,47 @@ const listeners = new Set<() => void>()
 
 export function setStudio(patch: Partial<StudioState> | ((s: StudioState) => Partial<StudioState>)) {
   const next = typeof patch === 'function' ? patch(state) : patch
-  if (next.mode && next.mode !== state.mode) { try { sessionStorage.setItem('forge.mode', next.mode) } catch { /* storage blocked */ } }
+  const prev = state
   state = { ...state, ...next }
+  if (!fromHistory && (state.mode !== prev.mode || state.scale !== prev.scale)) syncUrl(state.mode !== prev.mode)
   listeners.forEach((l) => l())
 }
+
+// The page you are on lives in the URL (?mode=engineer&scale=board), so refresh keeps
+// you there and the browser back/forward buttons move between Research, System and Board.
+let fromHistory = false
+function syncUrl(push: boolean) {
+  const q = new URLSearchParams(location.search)
+  q.delete('brief')
+  if (state.mode === 'engineer') {
+    q.set('mode', 'engineer')
+    q.set('scale', state.scale)
+  } else {
+    q.delete('mode')
+    q.delete('scale')
+  }
+  const qs = q.toString()
+  const url = location.pathname + (qs ? `?${qs}` : '')
+  if (push) history.pushState(null, '', url)
+  else history.replaceState(null, '', url)
+}
+// Drop a stale ?mode=engineer left in the address bar by the page we refreshed from.
+if (!new URLSearchParams(location.search).has('brief')) {
+  const q = new URLSearchParams(location.search)
+  q.delete('mode')
+  q.delete('scale')
+  const qs = q.toString()
+  history.replaceState(null, '', location.pathname + (qs ? `?${qs}` : ''))
+}
+window.addEventListener('popstate', () => {
+  const q = new URLSearchParams(location.search)
+  fromHistory = true
+  setStudio({
+    mode: q.get('mode') === 'engineer' ? 'engineer' : 'research',
+    scale: q.get('scale') === 'board' ? 'board' : 'system',
+  })
+  fromHistory = false
+})
 
 export function commitBoardEdit(
   updater: (draft: Board) => void,

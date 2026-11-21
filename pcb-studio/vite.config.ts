@@ -1,6 +1,7 @@
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
+import { writeFile } from 'node:fs/promises'
 import { fileURLToPath, URL } from 'node:url'
 import { forgeAi } from './server/index.ts'
 import { verifyPlugin } from './server/verify.ts'
@@ -9,8 +10,24 @@ import { repairPlugin } from './server/repair.ts'
 
 const RESEARCH = process.env.FORGE_RESEARCH_URL ?? 'http://127.0.0.1:8000'
 
+// The research page opened on its own (:8000) hands a finished brief to this studio.
+// Vite takes another port when 5173 is busy, so write the real address where the
+// research server can read it (forge_research/studio.py, pcb_url).
+function advertiseUrl(): Plugin {
+  return {
+    name: 'forge-advertise-url',
+    configureServer(server) {
+      server.httpServer?.once('listening', () => {
+        const address = server.httpServer?.address()
+        if (!address || typeof address === 'string') return
+        void writeFile(fileURLToPath(new URL('./dev-url.local', import.meta.url)), `http://localhost:${address.port}/\n`).catch(() => {})
+      })
+    },
+  }
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss(), forgeAi(), verifyPlugin(), shopPlugin(), repairPlugin()],
+  plugins: [react(), tailwindcss(), forgeAi(), verifyPlugin(), shopPlugin(), repairPlugin(), advertiseUrl()],
   // The research swarm (forge_research FastAPI) runs on :8000. Its page is shown in the
   // Research tab under /research; its own /api and /static paths are forwarded too.
   // /api/generate and /api/verify are served by the plugins above and never reach it.

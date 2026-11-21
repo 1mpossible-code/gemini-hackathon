@@ -2,10 +2,14 @@
 // compatible alternatives + cost comparison, and the scale transition veil.
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { ArrowDownRight, ArrowUpRight, Check, CircuitBoard, Repeat2, Search, TriangleAlert, ZoomIn } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, Check, CircuitBoard, ExternalLink, Loader2, Repeat2, Search, ShoppingBag, TriangleAlert, ZoomIn } from 'lucide-react'
 import { byId } from '@/data/catalog'
 import { alternativesFor, systemCost, unitPrice, BUS_COLOR, type SystemDevice } from '@/data/system'
-import { getStudio, setStudio, useStudio, goScale, type Scale } from '@/state/studio'
+import {
+  computeBoardBomCost, computeSystemDevicesCost, getStudio, setStudio, useStudio, goScale,
+  type Scale, type ShopSearchEntry,
+} from '@/state/studio'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -163,6 +167,17 @@ function swap(dev: SystemDevice, catalogId: string) {
   }))
 }
 
+async function searchShopForPart(mpn: string, name: string, manufacturer: string): Promise<ShopSearchEntry> {
+  const res = await fetch('/api/shop/search', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ mpn, name, manufacturer }),
+  })
+  const data = (await res.json()) as ShopSearchEntry
+  setStudio((s) => ({ shopByMpn: { ...s.shopByMpn, [mpn]: data } }))
+  return data
+}
+
 function DeviceDetail({ dev }: { dev: SystemDevice }) {
   const sys = useStudio((s) => s.system)
   const item = byId[dev.catalogId]
@@ -171,6 +186,17 @@ function DeviceDetail({ dev }: { dev: SystemDevice }) {
   const total = systemCost(sys)
   const [preview, setPreview] = useState<string | null>(null)
   const pv = alts.find((a) => a.item.id === preview)
+  const [searching, setSearching] = useState(false)
+  const shopEntry = useStudio((s) => s.shopByMpn[item.mpn])
+  const selectedOffer = useStudio((s) => s.selectedOfferByMpn[item.mpn])
+  const runBuySearch = async () => {
+    setSearching(true)
+    try {
+      await searchShopForPart(item.mpn, item.name, item.manufacturer)
+    } finally {
+      setSearching(false)
+    }
+  }
   return (
     <div className="p-4">
       <div className="flex items-start justify-between gap-2">
@@ -269,6 +295,76 @@ function DeviceDetail({ dev }: { dev: SystemDevice }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+
+      {/* Progressive disclosure: Buy parts (Shop.dev) */}
+      <div className="mt-5 border-t border-border pt-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="label-mono">Buy parts</div>
+            <div className="text-[11px] text-muted-foreground">Live merchant pricing</div>
+          </div>
+          <Button size="sm" variant="secondary" onClick={runBuySearch} disabled={searching}>
+            {searching ? <Loader2 className="size-3.5 animate-spin" /> : <ShoppingBag className="size-3.5" />}
+            Find sellers
+          </Button>
+        </div>
+
+        {shopEntry && (
+          <div className="mt-2.5 space-y-1.5 text-xs">
+            {shopEntry.status === 'no_results' && (
+              <div className="rounded-md border border-dashed border-border p-2.5 text-[11px] text-muted-foreground">
+                No matching merchant listings found for {item.name}. Curated reference price ({usd(unitPrice(item))}) remains active.
+              </div>
+            )}
+            {shopEntry.status === 'error' && (
+              <div className="text-[11px] text-red-300">{shopEntry.error}</div>
+            )}
+            {shopEntry.offers.slice(0, 3).map((o) => {
+              const active = selectedOffer?.offerId === o.offerId
+              return (
+                <div key={o.offerId} className={cn('rounded-md border p-2', active ? 'border-foreground/60 bg-accent/40' : 'border-border')}>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="line-clamp-1 text-[11.5px] font-medium">{o.title}</span>
+                    <span className="shrink-0 font-mono text-[11.5px]">{o.formattedPrice}</span>
+                  </div>
+                  <div className="mt-0.5 text-[10.5px] text-muted-foreground">
+                    {o.sellerName} · {o.available ? 'In stock' : 'Out of stock'}
+                  </div>
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    {o.matchKind === 'exact_match' && o.available && o.currency === 'USD' && (
+                      <Button
+                        size="sm"
+                        variant={active ? 'default' : 'outline'}
+                        className="h-6 px-2 text-[10.5px]"
+                        onClick={() =>
+                          setStudio((s) => ({
+                            selectedOfferByMpn: active
+                              ? Object.fromEntries(Object.entries(s.selectedOfferByMpn).filter(([k]) => k !== item.mpn))
+                              : { ...s.selectedOfferByMpn, [item.mpn]: o },
+                          }))
+                        }
+                      >
+                        {active ? 'Using price' : 'Use price'}
+                      </Button>
+                    )}
+                    <a
+                      href={o.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex h-6 items-center gap-1 rounded border border-border px-2 font-mono text-[10px] text-muted-foreground hover:text-foreground"
+                    >
+                      Open store <ExternalLink className="size-2.5" />
+                    </a>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Progressive disclosure: Technical metadata */}
     </div>
   )
 }
@@ -335,25 +431,241 @@ function SystemOverview() {
   )
 }
 
+// Shopify cart permalink: lands on the merchant's checkout with the items preloaded.
+function checkoutUrl(storeUrl: string, lines: { variantId: string; qty: number }[]): string {
+  const items = lines.map((l) => `${l.variantId.split('/').pop()}:${l.qty}`).join(',')
+  return `${new URL(storeUrl).origin}/cart/${items}`
+}
+
+const linkCls =
+  'inline-flex h-6 items-center gap-1 rounded border border-border px-2 font-mono text-[10px] text-muted-foreground hover:text-foreground'
+
+function SystemPartsAndBuyTab() {
+  const sys = useStudio((s) => s.system)
+  const board = useStudio((s) => s.board)
+  const budgetUsd = useStudio((s) => s.budgetUsd)
+  const shopByMpn = useStudio((s) => s.shopByMpn)
+  const selectedOfferByMpn = useStudio((s) => s.selectedOfferByMpn)
+  const [searchingAll, setSearchingAll] = useState(false)
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, { id: string; label: string; mpn: string; name: string; manufacturer: string; qty: number; unit: number }>()
+    for (const d of sys.devices) {
+      const item = byId[d.catalogId]
+      const cur = map.get(item.mpn) ?? {
+        id: d.id,
+        label: d.label,
+        mpn: item.mpn,
+        name: item.name,
+        manufacturer: item.manufacturer,
+        qty: 0,
+        unit: unitPrice(item),
+      }
+      cur.qty++
+      map.set(item.mpn, cur)
+    }
+    return [...map.values()]
+  }, [sys.devices])
+
+  const devCost = useMemo(() => computeSystemDevicesCost(sys, selectedOfferByMpn).totalUsd, [sys, selectedOfferByMpn])
+  const pcbCost = useMemo(() => computeBoardBomCost(board, selectedOfferByMpn).totalUsd, [board, selectedOfferByMpn])
+  const combined = devCost + pcbCost
+
+  // The offer each row would buy: the one the user picked, else the best live exact match.
+  const picks = grouped.flatMap((g) => {
+    const o =
+      selectedOfferByMpn[g.mpn] ??
+      shopByMpn[g.mpn]?.offers.find((x) => x.matchKind === 'exact_match' && x.available && x.priceUsd != null)
+    return o ? [{ offer: o, qty: g.qty }] : []
+  })
+  const openAllStores = () => {
+    for (const p of picks) window.open(p.offer.url, '_blank', 'noopener,noreferrer')
+  }
+  const checkoutAll = () => {
+    // One checkout per merchant, with all of that merchant's parts in the cart.
+    const byStore = new Map<string, { url: string; lines: { variantId: string; qty: number }[] }>()
+    for (const p of picks) {
+      const origin = new URL(p.offer.url).origin
+      const cur = byStore.get(origin) ?? { url: p.offer.url, lines: [] }
+      cur.lines.push({ variantId: p.offer.variantId, qty: p.qty })
+      byStore.set(origin, cur)
+    }
+    for (const st of byStore.values()) window.open(checkoutUrl(st.url, st.lines), '_blank', 'noopener,noreferrer')
+  }
+
+  const runSearchAll = async () => {
+    setSearchingAll(true)
+    try {
+      await Promise.all(grouped.slice(0, 5).map((g) => searchShopForPart(g.mpn, g.name, g.manufacturer)))
+    } finally {
+      setSearchingAll(false)
+    }
+  }
+
+  return (
+    <div className="space-y-3 p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="label-mono">Total known parts</div>
+          <div className="mt-0.5 font-mono text-xl font-medium tabular">{usd(combined)}</div>
+          <div className="text-[11px] text-muted-foreground tabular">
+            Devices {usd(devCost)} · PCB {usd(pcbCost)}
+          </div>
+        </div>
+        <Button size="sm" variant="secondary" onClick={runSearchAll} disabled={searchingAll}>
+          {searchingAll ? <Loader2 className="size-3.5 animate-spin" /> : <ShoppingBag className="size-3.5" />}
+          Buy parts
+        </Button>
+      </div>
+
+      {picks.length > 0 && (
+        <div className="flex items-center gap-2">
+          <Button size="sm" variant="outline" className="flex-1" onClick={openAllStores}>
+            <ExternalLink className="size-3.5" />
+            Open all stores ({picks.length})
+          </Button>
+          <Button size="sm" className="flex-1" onClick={checkoutAll}>
+            <ShoppingBag className="size-3.5" />
+            Checkout all
+          </Button>
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <span className="label-mono shrink-0">Budget ($)</span>
+        <Input
+          type="number"
+          aria-label="Budget in dollars"
+          min="0"
+          step="1"
+          value={budgetUsd ?? ''}
+          placeholder="No cap"
+          onChange={(e) => {
+            const raw = e.target.value.trim()
+            const num = Number(raw)
+            setStudio({
+              budgetUsd: raw === '' ? null : Number.isFinite(num) && num >= 0 ? num : budgetUsd,
+            })
+          }}
+          className="h-7 font-mono text-xs"
+        />
+      </div>
+
+      {budgetUsd != null && (
+        <div
+          className={cn(
+            'rounded-md border px-2.5 py-1.5 font-mono text-[11px]',
+            combined > budgetUsd ? 'border-amber-400/40 bg-amber-500/10 text-amber-200' : 'border-border text-muted-foreground',
+          )}
+        >
+          {combined > budgetUsd
+            ? `Over budget by ${usd(combined - budgetUsd)}`
+            : `${usd(budgetUsd - combined)} remaining under ${usd(budgetUsd)}`}
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        {grouped.map((g) => {
+          const offer = selectedOfferByMpn[g.mpn]
+          const shop = shopByMpn[g.mpn]
+          const bestExactUsd = shop?.offers.find((o) => o.matchKind === 'exact_match' && o.available && o.priceUsd != null)
+          const unit = offer?.priceUsd ?? g.unit
+          return (
+            <div key={g.mpn} className="rounded-md border border-border p-2 text-xs">
+              <div className="flex items-start justify-between gap-2">
+                <button
+                  onClick={() => setStudio({ device: g.id, systemTab: 'inspect', touring: false })}
+                  className="truncate text-left font-medium hover:underline"
+                >
+                  {g.name}
+                </button>
+                <span className="shrink-0 font-mono text-[11.5px] tabular">{usd(unit * g.qty)}</span>
+              </div>
+              <div className="mt-0.5 flex items-center justify-between text-[10.5px] text-muted-foreground">
+                <span>Qty ×{g.qty} · {offer ? offer.sellerName : `${usd(g.unit)}/ea ref`}</span>
+                {shop && shop.status === 'no_results' && <span>No live listing</span>}
+              </div>
+              {bestExactUsd && !offer && (
+                <div className="mt-1.5 flex items-center justify-between border-t border-border/60 pt-1 text-[10.5px]">
+                  <span className="truncate text-muted-foreground">
+                    Live: {bestExactUsd.formattedPrice} · {bestExactUsd.sellerName}
+                  </span>
+                  <button
+                    onClick={() =>
+                      setStudio((s) => ({
+                        selectedOfferByMpn: { ...s.selectedOfferByMpn, [g.mpn]: bestExactUsd },
+                      }))
+                    }
+                    className="ml-2 shrink-0 rounded border border-border px-1.5 py-0.5 font-mono text-[10px] hover:bg-accent"
+                  >
+                    Use
+                  </button>
+                </div>
+              )}
+              {(offer ?? bestExactUsd) && (
+                <div className="mt-1.5 flex items-center gap-1.5">
+                  <a href={(offer ?? bestExactUsd)!.url} target="_blank" rel="noopener noreferrer" className={linkCls}>
+                    Store <ExternalLink className="size-2.5" />
+                  </a>
+                  <a
+                    href={checkoutUrl((offer ?? bestExactUsd)!.url, [{ variantId: (offer ?? bestExactUsd)!.variantId, qty: g.qty }])}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={linkCls}
+                  >
+                    Checkout ×{g.qty} <ShoppingBag className="size-2.5" />
+                  </a>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      <p className="text-[10.5px] leading-relaxed text-muted-foreground">
+        Shows known component reference prices and live merchant offers (via Shop.dev). Chassis machining, PCB fab, shipping, and tax are excluded.
+      </p>
+    </div>
+  )
+}
+
 export function SystemInspector() {
   const sys = useStudio((s) => s.system)
   const device = useStudio((s) => s.device)
+  const tab = useStudio((s) => s.systemTab)
   const dev = sys.devices.find((d) => d.id === device)
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-border max-md:hidden">
-      <div className="flex-1 overflow-y-auto">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={dev ? dev.id + dev.catalogId : device ?? 'overview'}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -6 }}
-            transition={{ duration: 0.28, ease }}
-          >
-            {dev ? <DeviceDetail dev={dev} /> : device === 'pcb' ? <PcbDetail /> : <SystemOverview />}
-          </motion.div>
-        </AnimatePresence>
-      </div>
+    <aside className="flex w-80 shrink-0 flex-col border-l border-border max-md:hidden" aria-label="Component inspector">
+      <Tabs
+        value={tab}
+        onValueChange={(v) => setStudio({ systemTab: v as 'inspect' | 'bom' })}
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <div className="border-b border-border px-3 py-2">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="inspect">{dev ? dev.label : device === 'pcb' ? 'Board' : 'Overview'}</TabsTrigger>
+            <TabsTrigger value="bom">Parts &amp; cost</TabsTrigger>
+          </TabsList>
+        </div>
+
+        <TabsContent value="inspect" className="min-h-0 flex-1 overflow-y-auto">
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={dev ? dev.id + dev.catalogId : device ?? 'overview'}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.22, ease }}
+            >
+              {dev ? <DeviceDetail dev={dev} /> : device === 'pcb' ? <PcbDetail /> : <SystemOverview />}
+            </motion.div>
+          </AnimatePresence>
+        </TabsContent>
+
+        <TabsContent value="bom" className="min-h-0 flex-1 overflow-y-auto">
+          <SystemPartsAndBuyTab />
+        </TabsContent>
+      </Tabs>
     </aside>
   )
 }

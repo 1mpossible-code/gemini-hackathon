@@ -93,5 +93,5 @@ class ViewerError extends Component<{ children: ReactNode }, { failed: boolean }
 }
 /** Shows a bundled whole-object model from public/concepts. */
 export function ConceptScene({ url }: { url: string }) {
-  return <ViewerError key={url}><Canvas camera={{ position: [4, 3, 5], fov: 40 }} dpr={[1, 2]}><color attach="background" args={['#0c0d0f']} /><ambientLight intensity={1.4} /><directionalLight position={[5, 8, 5]} intensity={3} /><directionalLight position={[-4, 2, -3]} intensity={1.2} /><Suspense fallback={null}><Model url={url}/></Suspense><OrbitControls makeDefault autoRotate autoRotateSpeed={0.7} /></Canvas></ViewerError>
+  return <ViewerError key={url}><Canvas camera={{ position: [4, 3, 5], fov: 40 }} dpr={1}><color attach="background" args={['#0c0d0f']} /><ambientLight intensity={1.4} /><directionalLight position={[5, 8, 5]} intensity={3} /><directionalLight position={[-4, 2, -3]} intensity={1.2} /><Suspense fallback={null}><Model url={url}/></Suspense><OrbitControls makeDefault autoRotate autoRotateSpeed={0.7} /></Canvas></ViewerError>
 }

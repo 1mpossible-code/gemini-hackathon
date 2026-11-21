@@ -430,6 +430,26 @@ def assets_rev() -> dict[str, str]:
     return {"rev": str(latest)}
 
 
+PCB_URL_FILE = Path(__file__).resolve().parents[1] / "pcb-studio" / "dev-url.local"
+
+
+def pcb_url() -> str:
+    """Where the standalone research page sends a finished brief.
+
+    FORGE_PCB_URL wins. Otherwise use the address the PCB studio dev server wrote
+    when it started, because Vite does not always get port 5173.
+    """
+    configured = os.environ.get("FORGE_PCB_URL")
+    if configured:
+        return configured
+    try:
+        written = PCB_URL_FILE.read_text().strip()
+    except OSError:
+        written = ""
+    # Vite binds "localhost", which can be IPv6 only, so 127.0.0.1 may refuse.
+    return written or "http://localhost:5173/"
+
+
 @app.get("/api/session")
 def session() -> dict[str, Any]:
     model = configured_model()
@@ -439,7 +459,7 @@ def session() -> dict[str, Any]:
         "lean_available": find_lean_binary() is not None,
         "shop_mcp_enabled": True,
         "sample_brief": DEMO_BRIEF,
-        "pcb_url": os.environ.get("FORGE_PCB_URL", "http://127.0.0.1:5173/"),
+        "pcb_url": pcb_url(),
     }
 
 

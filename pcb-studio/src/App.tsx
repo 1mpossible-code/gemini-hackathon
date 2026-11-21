@@ -3,11 +3,9 @@ import { AnimatePresence, motion } from 'motion/react'
 import {
   Box, Boxes, Check, ChevronRight, CircuitBoard, Cpu, Download, Expand, ExternalLink, FileJson,
   Image as ImageIcon, Layers, Loader2, Maximize, Pause, Play, RotateCw, Search, ShieldCheck,
-  ShoppingBag, Sparkles, Tag, Undo2, Wrench, X,
+  ShoppingBag, Tag, Undo2, Wrench, X,
 } from 'lucide-react'
 import { PcbScene } from '@/scene/Scene'
-import { ConceptScene } from '@/components/Concept'
-import { findConcept } from '@/data/concepts'
 import {
   commitBoardEdit, computeBoardBomCost, getStudio, goScale, requestExport, requestFit, setStudio,
   undoBoardEdit, useStudio, type ExportFormat, type ShopOffer, type ShopSearchEntry,
@@ -23,8 +21,8 @@ import { Tip, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { ResearchPane } from '@/components/Research'
 import { ScaleSwitch, ScaleTransition, SystemInspector, SystemLibrary } from '@/components/SystemPanels'
-import { DEMO_BRIEFS, systemCost, systemFromPrompt, type SystemDesign } from '@/data/system'
-import { storedGeminiKey, storeGeminiKey } from '@/ai/generate'
+import { hasHandBuiltBody, systemCost, systemFromPrompt, type SystemDesign } from '@/data/system'
+import { storedGeminiKey } from '@/ai/generate'
 import { firmwareFor, isController } from '@/data/firmware'
 
 const ease = [0.16, 1, 0.3, 1] as const
@@ -260,7 +258,6 @@ function Prompt() {
   const [busy, setBusy] = useState(false)
   const [log, setLog] = useState<GenLog[]>([])
   const [error, setError] = useState<string | null>(null)
-  const [apiKey, setApiKey] = useState(storedGeminiKey)
   const pending = useStudio((s) => s.pendingPrompt)
   const started = useRef<string | null>(null)
   useEffect(() => {
@@ -278,10 +275,11 @@ function Prompt() {
     setBusy(true); setError(null); setLog([])
     // The off-board system follows the brief right away, even before the board arrives.
     const drafted = systemFromPrompt(text_)
-    setStudio({ system: drafted, concept: findConcept(text_), scale: 'system', view: '3d', exploded: false, selected: null, device: null })
+    // Rename the PCB at once, so the previous design's board name is not shown while the new one is planned.
+    setStudio({ system: drafted, board: { ...getStudio().board, name: `${drafted.name} board (planning…)` }, scale: 'system', view: '3d', exploded: false, selected: null, device: null })
     requestFit()
     // The server can also supply the Gemini key; keep the draft if generation fails.
-    {
+    if (!hasHandBuiltBody(text_)) {
       const layout = `PCB height above origin: ${drafted.pcbHeight} mm.\nDevices:\n` + drafted.devices.map((d) => `- ${d.label} at x=${d.x}, z=${d.z}`).join('\n')
       void fetch('/api/chassis', { method: 'POST', headers: { 'content-type': 'application/json', 'x-gemini-key': storedGeminiKey() }, body: JSON.stringify({ prompt: text_, layout }) })
         .then((r) => r.json())
@@ -312,48 +310,6 @@ function Prompt() {
       transition={{ delay: 0.45, duration: 0.6, ease }}
       className="absolute left-1/2 top-4 z-10 w-[min(560px,calc(100%-32px))] -translate-x-1/2"
     >
-      <form
-        onSubmit={(e) => { e.preventDefault(); run() }}
-        className="flex items-center gap-2 rounded-xl border border-border bg-background/80 p-1.5 pl-3 shadow-2xl backdrop-blur-md"
-      >
-        <Sparkles className="size-4 shrink-0 text-muted-foreground" />
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Describe a board: “ESP32 weather station with BME280 and OLED”"
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-        />
-        <Button size="sm" type="submit" disabled={busy || !text.trim()}>
-          {busy ? <Loader2 className="size-3.5 animate-spin" /> : 'Generate'}
-        </Button>
-      </form>
-      <label className="mt-2 flex items-center gap-2 rounded-lg border border-border bg-background/70 px-3 py-1.5 backdrop-blur-md">
-        <span className="label-mono shrink-0 !text-[10px] text-muted-foreground">Gemini API key</span>
-        <input
-          type="password"
-          value={apiKey}
-          onChange={(e) => { const v = e.target.value.trim(); setApiKey(v); storeGeminiKey(v) }}
-          placeholder="Optional: server key is used when blank"
-          autoComplete="off"
-          spellCheck={false}
-          className="min-w-0 flex-1 bg-transparent font-mono text-xs outline-none placeholder:text-muted-foreground"
-        />
-        <span className="label-mono shrink-0 !text-[10px] text-muted-foreground">{apiKey ? 'saved in this browser' : 'optional'}</span>
-      </label>
-      {!busy && (
-        <div className="mt-2 flex flex-wrap justify-center gap-1.5" role="group" aria-label="Demo briefs">
-          {DEMO_BRIEFS.map((d) => (
-            <button
-              key={d.id}
-              type="button"
-              onClick={() => { setText(d.brief); void run(d.brief) }}
-              className="label-mono rounded-md border border-border bg-background/70 px-2 py-1 !text-[10px] text-muted-foreground backdrop-blur-md hover:border-foreground/40 hover:text-foreground"
-            >
-              {d.label}
-            </button>
-          ))}
-        </div>
-      )}
       <AnimatePresence>
         {(busy || error) && (
           <motion.div
@@ -955,7 +911,6 @@ function StatusBar() {
 export default function App() {
   const scale = useStudio((s) => s.scale)
   const mode = useStudio((s) => s.mode)
-  const concept = useStudio((s) => s.concept)
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === 'INPUT') return
@@ -982,13 +937,8 @@ export default function App() {
             transition={{ duration: 1.2, ease }}
             className="relative min-w-0 flex-1"
           >
-            {scale === 'system' && concept ? <ConceptScene url={concept.url} /> : <PcbScene />}
+            <PcbScene />
             <Prompt />
-            {scale === 'system' && concept && <div className="absolute bottom-24 left-4 z-10 flex items-center gap-3 rounded-lg border border-border bg-background/90 px-3 py-2 text-xs shadow-lg" role="status">
-              <span>{concept.label} · library model · drag to rotate</span>
-              <button className="underline" onClick={() => requestExport('stl')}>Download STL</button>
-              <button className="underline" onClick={() => setStudio({ concept: null })}>Show assembly</button>
-            </div>}
             <Toolbar />
             <ScaleTransition />
           </motion.main>

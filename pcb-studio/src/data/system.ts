@@ -82,7 +82,8 @@ export const defaultSystem: SystemDesign = {
 // ---------------------------------------------------------------- generated systems
 
 const WEARABLE = /(wrist|bracelet|wearable|smartwatch|\bwatch\b|armband|forearm|glove|sleeve|\bstrap\b|\bband\b)/i
-const VEHICLE = /\b(rover|robot|car|wheel(ed)?|4wd|2wd|chassis|tank|buggy|drive|line[- ]follow)/i
+// Whole words only: a loose match turned "card", "cardiac" and "motor driver" briefs into rovers.
+const VEHICLE = /\b(rovers?|robots?|cars?|wheel(s|ed)?|4wd|2wd|chassis|tanks?|buggy|drive(s|train)?|line[- ]follow(er|ing)?)\b/i
 const SKIP: string[] = ['board', 'mcu', 'module', 'passive', 'connector', 'driver', 'indicator']
 // Words that map to catalog items even when the brief does not name the part.
 const SYNONYMS: [RegExp, string][] = [
@@ -293,18 +294,100 @@ function tray(sys: SystemDesign): SystemDesign {
   return { ...sys, structure }
 }
 
+const BREWER = /\b(coffee|espresso|brew(er|ing)?)\b/i
+const LAMP = /\b(lamp|desk light|task light)\b/i
+const PRINTER = /\b(3d ?print(er|ing)?|printer)\b/i
+
+/** Electronics on a base plate with a hand-built product body around them. */
+function shaped(text: string, picks: CatalogItem[], fallback: string, body: (w: number, d: number) => Prim[]): SystemDesign {
+  const parts = picks.filter((p) => busFor(p) !== 'motor')
+  const base = plate(text, parts.length ? parts : [byId['ssd1306-096'], byId['tact-6mm']].filter(Boolean))
+  return { ...base, name: titleFor(text, fallback), structure: body(base.chassis.w, base.chassis.d) }
+}
+
+/** Drip coffee machine: rear column, clear water reservoir, brew head over a glass jug on a drip tray. */
+const brewer = (w: number, d: number): Prim[] => {
+  const back = -d / 2 - 24, front = d / 2 + 52
+  return [
+    { shape: 'box', size: [w, 190, 44], pos: [0, 95, back], mat: 'plastic' },
+    { shape: 'box', size: [w * 0.7, 120, 26], pos: [0, 120, back - 36], mat: 'clear' },
+    { shape: 'box', size: [w, 34, d + 150], pos: [0, 207, 26], mat: 'plastic' },
+    { shape: 'cyl', size: [24, 20, 0], pos: [0, 180, front], mat: 'metal' },
+    { shape: 'cyl', size: [5, 12, 0], pos: [0, 164, front], mat: 'metal' },
+    { shape: 'box', size: [w, 8, 96], pos: [0, -4, front], mat: 'metal' },
+    { shape: 'cyl', size: [40, 3, 0], pos: [0, 1.5, front], mat: 'metal' },
+    { shape: 'cyl', size: [36, 86, 0], pos: [0, 46, front], mat: 'clear' },
+    { shape: 'cyl', size: [38, 6, 0], pos: [0, 92, front], mat: 'plastic' },
+    { shape: 'box', size: [8, 52, 14], pos: [44, 50, front], mat: 'plastic' },
+    ...[-1, 1].flatMap((sx): Prim[] => [-1, 1].map((sz) => ({ shape: 'cyl', size: [8, 6, 0], pos: [sx * (w / 2 - 12), -9, sz * (d / 2 - 4) + 12], mat: 'rubber' }))),
+  ]
+}
+
+/** Desk lamp: weighted base, upright, angled arm, shade and bulb over the electronics. */
+const lamp = (w: number, d: number): Prim[] => {
+  const back = -d / 2 - 22
+  return [
+    { shape: 'cyl', size: [34, 8, 0], pos: [0, -4, back], mat: 'metal' },
+    { shape: 'cyl', size: [5, 230, 0], pos: [0, 115, back], mat: 'metal' },
+    { shape: 'sphere', size: [9, 9, 9], pos: [0, 232, back], mat: 'metal' },
+    { shape: 'box', size: [8, 8, 150], pos: [0, 252, back + 68], rot: [-16, 0, 0], mat: 'metal' },
+    { shape: 'sphere', size: [8, 8, 8], pos: [0, 272, back + 138], mat: 'metal' },
+    { shape: 'cyl', size: [46, 44, 0], pos: [0, 252, back + 150], mat: 'metal' },
+    { shape: 'cyl', size: [14, 16, 0], pos: [0, 280, back + 150], mat: 'plastic' },
+    { shape: 'sphere', size: [20, 20, 20], pos: [0, 232, back + 150], mat: 'clear' },
+    { shape: 'cyl', size: [3, w * 0.6, 0], pos: [0, 4, d / 2 + 14], rot: [0, 0, 90], mat: 'rubber' },
+  ]
+}
+
+/** Open-frame 3D printer: four uprights, top rails, X gantry with hotend, heated bed and a filament spool. */
+const printer = (w: number, d: number): Prim[] => {
+  const fx = w / 2 + 30, fz = d / 2 + 30, top = 260, gy = 150
+  const parts: Prim[] = []
+  for (const sx of [-1, 1]) {
+    for (const sz of [-1, 1]) {
+      parts.push({ shape: 'box', size: [14, top + 20, 14], pos: [sx * fx, top / 2 - 10, sz * fz], mat: 'metal' })
+      parts.push({ shape: 'cyl', size: [9, 6, 0], pos: [sx * fx, -23, sz * fz], mat: 'rubber' })
+    }
+    parts.push({ shape: 'box', size: [14, 14, fz * 2], pos: [sx * fx, top, 0], mat: 'metal' })
+    parts.push({ shape: 'box', size: [14, 14, fz * 2], pos: [sx * fx, -13, 0], mat: 'metal' })
+    parts.push({ shape: 'cyl', size: [4, top, 0], pos: [sx * (fx - 16), top / 2, 0], mat: 'metal' })
+    parts.push({ shape: 'box', size: [26, 30, 34], pos: [sx * (fx - 16), gy, 0], mat: 'plastic' })
+  }
+  for (const sz of [-1, 1]) parts.push({ shape: 'box', size: [fx * 2, 14, 14], pos: [0, top, sz * fz], mat: 'metal' })
+  parts.push({ shape: 'box', size: [fx * 2 - 30, 8, 8], pos: [0, gy + 8, 0], mat: 'metal' })
+  parts.push({ shape: 'box', size: [fx * 2 - 30, 8, 8], pos: [0, gy - 8, 0], mat: 'metal' })
+  parts.push({ shape: 'box', size: [40, 46, 36], pos: [-18, gy, 22], mat: 'plastic' })
+  parts.push({ shape: 'cyl', size: [9, 22, 0], pos: [-18, gy - 34, 22], mat: 'metal' })
+  parts.push({ shape: 'cyl', size: [2, 10, 0], pos: [-18, gy - 50, 22], mat: 'metal' })
+  parts.push({ shape: 'box', size: [w + 20, 3, d + 20], pos: [0, 62, 0], mat: 'clear' })
+  parts.push({ shape: 'box', size: [w, 4, d], pos: [0, 58, 0], mat: 'metal' })
+  parts.push({ shape: 'ring', size: [54, 16, 0], pos: [0, top + 70, -fz], mat: 'plastic' })
+  parts.push({ shape: 'box', size: [8, 70, 8], pos: [0, top + 35, -fz], mat: 'metal' })
+  return parts
+}
+
+/**
+ * True when the brief has a hand-built body, which a generated chassis must not replace.
+ * The rover plate and the wrist band count: a generated chassis drops them (form 'none').
+ */
+export const hasHandBuiltBody = (text: string) => [FLYER, EYEWEAR, WEARABLE, VEHICLE, BREWER, PRINTER, LAMP].some((re) => re.test(text))
+
 export function systemFromPrompt(text: string): SystemDesign {
   const picks = devicesForBrief(text)
   if (FLYER.test(text)) return airframe(text, picks)
   if (EYEWEAR.test(text)) return eyewear(text, picks)
-  if (VEHICLE.test(text) && !WEARABLE.test(text)) {
+  // A wearable brief always gets the band, before any vehicle or appliance body.
+  if (WEARABLE.test(text)) return wearable(text, picks)
+  if (VEHICLE.test(text)) {
     const roverTags = new Set(defaultSystem.devices.flatMap((d) => byId[d.catalogId]?.tags ?? []).filter((t) => !GENERIC_TAGS.has(t)))
     const extra = picks.filter((p) => busFor(p) !== 'motor' && !p.tags.some((t) => roverTags.has(t))).slice(0, 2)
     if (!extra.length) return { ...defaultSystem, name: titleFor(text, defaultSystem.name) }
     const base = plate(text, extra)
     return { ...defaultSystem, name: titleFor(text, defaultSystem.name), devices: [...defaultSystem.devices, ...base.devices.filter((d) => d.id !== 'bat').map((d, i) => ({ ...d, port: `J${8 + i}`, x: i % 2 ? 58 : -58, z: 0 }))] }
   }
-  if (WEARABLE.test(text)) return wearable(text, picks)
+  if (BREWER.test(text)) return shaped(text, picks, 'Brewer B1', brewer)
+  if (PRINTER.test(text)) return shaped(text, picks, 'Printer P1', printer)
+  if (LAMP.test(text)) return shaped(text, picks, 'Lamp L1', lamp)
   const sys = plate(text, picks.length ? picks : [byId['ssd1306-096'], byId['tact-6mm']].filter(Boolean))
   // Wheeled builds keep an open plate so the drive motors and wheels stay visible.
   return sys.devices.some((d) => d.bus === 'motor') ? sys : tray(sys)
@@ -317,6 +400,11 @@ export const DEMO_BRIEFS: { id: string; label: string; brief: string }[] = [
   { id: 'weather', label: 'Weather station', brief: 'Make a solar weather station with a BME280 temperature and humidity sensor and an e-paper display over LoRa.' },
   { id: 'plant', label: 'Plant waterer', brief: 'Create a smart plant watering system with a soil moisture sensor, a pump relay and Wi-Fi alerts.' },
   { id: 'pulse', label: 'Pulse monitor', brief: 'Build a fingertip heart rate and SpO2 monitor with an OLED display and a buzzer alarm.' },
+  { id: 'drone', label: 'Drone', brief: 'Build a quadcopter drone with an IMU, GPS and a barometer for altitude hold.' },
+  { id: 'glasses', label: 'Smart glasses', brief: 'Design smart glasses with a heads-up OLED display, an IMU and a touch button.' },
+  { id: 'coffee', label: 'Coffee machine', brief: 'Make a smart coffee machine with a temperature sensor, a pump relay, an OLED display and a brew button.' },
+  { id: 'lamp', label: 'Desk lamp', brief: 'Build a smart desk lamp with an LED strip, a light sensor and a touch dimmer over Wi-Fi.' },
+  { id: 'printer', label: '3D printer', brief: 'Design a compact 3D printer controller with a hotend temperature sensor, an OLED status screen and a buzzer.' },
 ]
 
 export const unitPrice = (item: CatalogItem) => item.pricing[0]?.unit ?? 0

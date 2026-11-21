@@ -149,7 +149,7 @@ async function startResearch(mode) {
     $("#engineer-pcb-btn").hidden = false;
     $("#btn-engineer-pcb").hidden = false;
     if (report.project) $("#open-workbench-btn").hidden = false;
-    setTimeout(engineerPcb, 2500);
+    engineerPcb();
   } catch (error) {
     if (researchController.signal.aborted) {
       finishResearchMap("stopped", "Run cancelled. You can edit the brief and try again.");
@@ -164,7 +164,7 @@ async function startResearch(mode) {
       if (brief) {
         latestCompletedReport = { brief, review: { selected_parts: [] } };
         $("#engineer-pcb-btn").hidden = false;
-        setTimeout(engineerPcb, 2500);
+        engineerPcb();
       }
     }
   } finally {

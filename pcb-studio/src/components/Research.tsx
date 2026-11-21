@@ -29,10 +29,21 @@ export function ResearchPane() {
   }, [])
 
   return (
+    <>
     <iframe
       title="FORGE research and engineering studio"
       src={new URLSearchParams(location.search).get('run') === 'sample' ? '/research/?run=sample' : '/research/'}
       className={mode === 'research' ? 'fixed inset-0 z-40 h-dvh w-full border-0 bg-[#050505]' : 'hidden'}
     />
+    {mode === 'research' && (
+      <button
+        type="button"
+        onClick={() => setStudio({ mode: 'engineer' })}
+        className="fixed bottom-4 right-4 z-50 rounded-lg border border-white/20 bg-black/80 px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-white backdrop-blur-md hover:bg-white hover:text-black"
+      >
+        PCB Studio →
+      </button>
+    )}
+    </>
   )
 }
