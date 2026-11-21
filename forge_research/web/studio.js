@@ -1,0 +1,248 @@
+import {
+  applyResearchEvent,
+  finishResearchMap,
+  readResearch,
+  showResearchMap,
+} from "./research-map.js";
+import {
+  bindWorkbenchEvents,
+  getCurrentProject,
+  loadProjectIntoWorkbench,
+  setCatalogParts,
+  setLiveGeminiStatus,
+} from "./workbench.js";
+
+const $ = sel => document.querySelector(sel);
+
+const form = $("#composer");
+const brief = $("#brief");
+const connection = $("#connection");
+const leanBadge = $("#lean-badge");
+const runButton = $("#run");
+const runLabel = $("#run-label");
+const sampleButton = $("#run-sample");
+const exampleButton = $("#fill-example");
+const tightExampleButton = $("#fill-tight-budget");
+const feedback = $("#feedback");
+
+let sampleBrief =
+  "Design a wrist-worn finger-gesture detector using muscle sensors for under $100 that sends gesture events to my laptop over Bluetooth Low Energy.";
+const tightBrief =
+  "Design a BLE wristband using EMG muscle sensors for finger gestures. Keep core parts under $80 and size the strap for a 175 mm wrist.";
+
+let pending = false;
+let researchController = null;
+let latestCompletedReport = null;
+
+if (/mac/i.test(navigator.userAgentData?.platform ?? navigator.platform)) {
+  $("#modifier").textContent = "⌘";
+}
+
+function showFeedback(msg) {
+  feedback.textContent = msg;
+}
+
+function showBriefScreen() {
+  $("#brief-view").hidden = false;
+  $("#research-view").hidden = true;
+  $("#blocked-view").hidden = true;
+  $("#workbench-view").hidden = true;
+  $("#engineering-statusbar").hidden = true;
+  $("#Capabilities-pill").hidden = false;
+  $("#nav-context").textContent = "New Design Brief";
+  brief.focus();
+}
+
+function showResearchScreen() {
+  $("#brief-view").hidden = true;
+  $("#research-view").hidden = false;
+  $("#blocked-view").hidden = true;
+  $("#workbench-view").hidden = true;
+  $("#engineering-statusbar").hidden = true;
+  $("#Capabilities-pill").hidden = false;
+  $("#nav-context").textContent = "Agent Research DAG";
+}
+
+function renderBlockedReport(report) {
+  $("#brief-view").hidden = true;
+  $("#research-view").hidden = true;
+  $("#workbench-view").hidden = true;
+  $("#blocked-view").hidden = false;
+  $("#engineering-statusbar").hidden = true;
+  $("#Capabilities-pill").hidden = false;
+  $("#nav-context").textContent = "Blocked Report";
+
+  const statusMap = {
+    blocked: "Design blocked by constraints",
+    unsupported: "Outside supported wearable catalog scope",
+    candidate: "Candidate report",
+  };
+  $("#blocked-mode").textContent = `${
+    report.mode === "offline" ? "Offline sample" : `Gemini (${report.model})`
+  } · ${statusMap[report.review.status] || report.review.status}`;
+  $("#blocked-brief").textContent = report.brief;
+
+  const findingsList = $("#blocked-findings");
+  findingsList.replaceChildren(
+    ...(report.review.findings || []).map(f => {
+      const li = document.createElement("li");
+      const strong = document.createElement("strong");
+      strong.textContent = `${f.check.replaceAll("_", " ")} · ${f.status.toUpperCase()}`;
+      const small = document.createElement("small");
+      small.textContent = f.detail;
+      li.append(strong, small);
+      return li;
+    })
+  );
+
+  const stepsList = $("#blocked-next-steps");
+  stepsList.replaceChildren(
+    ...(report.review_notes?.next_steps || []).map(step => {
+      const li = document.createElement("li");
+      li.textContent = step;
+      return li;
+    })
+  );
+}
+
+function setBusy(busy, mode) {
+  pending = busy;
+  runButton.disabled = busy;
+  runLabel.textContent = busy && mode === "live" ? "Researching…" : "Research with Gemini";
+  sampleButton.disabled = busy;
+  exampleButton.disabled = busy;
+  tightExampleButton.disabled = busy;
+  brief.readOnly = busy;
+  form.setAttribute("aria-busy", String(busy));
+}
+
+async function startResearch(mode) {
+  if (pending) return;
+  const value = brief.value.trim();
+  if (mode === "live" && !value) {
+    showFeedback("Enter a hardware design brief or launch the offline wristband studio.");
+    brief.setAttribute("aria-invalid", "true");
+    brief.focus();
+    return;
+  }
+  brief.removeAttribute("aria-invalid");
+  setBusy(true, mode);
+  showFeedback("");
+  researchController = new AbortController();
+  $("#open-workbench-btn").hidden = true;
+  showResearchScreen();
+  showResearchMap(mode, mode === "sample" ? sampleBrief : value);
+
+  try {
+    const report = await readResearch(
+      mode,
+      value,
+      researchController.signal,
+      applyResearchEvent
+    );
+    latestCompletedReport = report;
+    finishResearchMap("completed");
+    if (report.project) {
+      $("#open-workbench-btn").hidden = false;
+      await loadProjectIntoWorkbench(report.project, report);
+    } else {
+      renderBlockedReport(report);
+    }
+  } catch (error) {
+    if (researchController.signal.aborted) {
+      finishResearchMap("stopped", "Run cancelled. You can edit the brief and try again.");
+    } else {
+      const message =
+        error instanceof TypeError
+          ? "Could not reach FORGE server. Check that uvicorn is running."
+          : error.message;
+      finishResearchMap("failed", message);
+    }
+  } finally {
+    researchController = null;
+    setBusy(false, mode);
+  }
+}
+
+$("#brand-home").addEventListener("click", e => {
+  e.preventDefault();
+  if (getCurrentProject()) {
+    $("#brief-view").hidden = true;
+    $("#research-view").hidden = true;
+    $("#blocked-view").hidden = true;
+    $("#workbench-view").hidden = false;
+    $("#engineering-statusbar").hidden = false;
+    $("#Capabilities-pill").hidden = true;
+    $("#nav-context").textContent = "Workbench";
+  } else {
+    showBriefScreen();
+  }
+});
+
+$("#stop-research").addEventListener("click", () => researchController?.abort());
+$("#edit-brief").addEventListener("click", showBriefScreen);
+$("#blocked-edit-brief").addEventListener("click", showBriefScreen);
+$("#open-workbench-btn").addEventListener("click", () => {
+  if (getCurrentProject()) {
+    loadProjectIntoWorkbench(getCurrentProject(), latestCompletedReport);
+  }
+});
+
+form.addEventListener("submit", e => {
+  e.preventDefault();
+  startResearch("live");
+});
+brief.addEventListener("keydown", e => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    form.requestSubmit();
+  }
+});
+brief.addEventListener("input", () => {
+  brief.removeAttribute("aria-invalid");
+  if (!pending) showFeedback("");
+});
+exampleButton.addEventListener("click", () => {
+  brief.value = sampleBrief;
+  brief.removeAttribute("aria-invalid");
+  showFeedback("");
+  brief.focus();
+});
+tightExampleButton.addEventListener("click", () => {
+  brief.value = tightBrief;
+  brief.removeAttribute("aria-invalid");
+  showFeedback("");
+  brief.focus();
+});
+sampleButton.addEventListener("click", () => startResearch("sample"));
+
+bindWorkbenchEvents(
+  () => showBriefScreen(),
+  () => {
+    showResearchScreen();
+    $("#open-workbench-btn").hidden = !getCurrentProject();
+    $("#edit-brief").hidden = false;
+    $("#stop-research").hidden = true;
+  }
+);
+
+Promise.all([
+  fetch("/api/session").then(r => (r.ok ? r.json() : null)),
+  fetch("/api/catalog").then(r => (r.ok ? r.json() : null)),
+])
+  .then(([sess, cat]) => {
+    if (cat?.parts) setCatalogParts(cat.parts);
+    if (sess) {
+      connection.dataset.live = String(sess.live);
+      connection.lastElementChild.textContent = sess.live
+        ? `Gemini live (${sess.gemini_model})`
+        : "Offline fixture mode";
+      leanBadge.dataset.ready = String(sess.lean_available);
+      leanBadge.textContent = sess.lean_available ? "Lean 4: ready" : "Lean 4: unavailable";
+      setLiveGeminiStatus(sess.live);
+      if (sess.sample_brief) sampleBrief = sess.sample_brief;
+    }
+  })
+  .catch(() => {
+    connection.lastElementChild.textContent = "Server unavailable";
+  });

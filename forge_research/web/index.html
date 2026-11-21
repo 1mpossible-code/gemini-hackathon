@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0c0e11">
+  <meta name="description" content="FORGE Interactive Hardware Engineering Studio — AI component research, parametric 3D CAD, Lean 4 formal verification, and live Shop.dev procurement.">
+  <title>FORGE · Interactive Hardware Engineering Studio</title>
+  <link rel="icon" href="/static/forge.svg" type="image/svg+xml">
+  <link rel="preload" href="/static/instrument.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/studio.css">
+  <link rel="stylesheet" href="/static/research-map.css">
+  <script type="module" src="/static/studio.js"></script>
+</head>
+<body>
+  <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="mark" viewBox="0 0 32 32">
+      <path d="m4 10 12-7 12 7-12 7-12-7Zm0 6 12 7 12-7M4 22l12 7 12-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h13m-5-5 5 5-5 5"/></symbol>
+    <symbol id="corner" viewBox="0 0 24 24"><path d="M6 18 18 6M8 6h10v10"/></symbol>
+    <symbol id="wave" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+    <symbol id="play" viewBox="0 0 24 24"><path d="m9 6 9 6-9 6V6Z"/></symbol>
+    <symbol id="shield" viewBox="0 0 24 24"><path d="M12 3 4 7v5c0 5 3.5 8.5 8 9 4.5-.5 8-4 8-9V7l-8-4Z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="spark" viewBox="0 0 24 24"><path d="m12 3 2.2 5.8L20 11l-5.8 2.2L12 19l-2.2-5.8L4 11l5.8-2.2L12 3Z"/></symbol>
+    <symbol id="bag" viewBox="0 0 24 24"><path d="M6 8h12l-1 12H7L6 8Z"/><path d="M9 8V6a3 3 0 0 1 6 0v2"/></symbol>
+    <symbol id="undo" viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/></symbol>
+    <symbol id="download" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M5 18v3h14v-3"/></symbol>
+  </svg>
+
+  <a class="skip-link" href="#main">Skip to workspace</a>
+
+  <!-- Global Top Bar: switches between Landing header and Engineering Status Bar -->
+  <header class="topbar" id="global-topbar">
+    <div class="topbar-brand-group">
+      <a class="brand" href="/" id="brand-home" aria-label="FORGE Studio home">
+        <svg aria-hidden="true"><use href="#mark"/></svg>
+        <span>FORGE</span>
+      </a>
+      <span class="separator" aria-hidden="true">/</span>
+      <span id="nav-context" class="nav-context">Interactive Engineering Studio</span>
+    </div>
+
+    <!-- Live Engineering Status Bar (shown when an active project is loaded) -->
+    <div id="engineering-statusbar" class="eng-statusbar" hidden>
+      <div class="status-metric">
+        <span class="metric-label">Project &amp; Rev</span>
+        <div class="metric-row">
+          <strong id="sb-project-name" class="metric-value">EMG Gesture Wristband</strong>
+          <span id="sb-revision" class="rev-pill">Rev 1</span>
+          <span id="sb-exec-mode" class="mode-tag" title="Origin of initial AI research">Offline</span>
+        </div>
+      </div>
+
+      <div class="status-metric">
+        <span class="metric-label">Known BOM</span>
+        <div class="metric-row">
+          <strong id="sb-total-cost" class="metric-value tabular">$53.70</strong>
+          <span id="sb-unpriced-badge" class="mini-badge warn" hidden>+unpriced</span>
+        </div>
+      </div>
+
+      <div class="status-metric">
+        <span class="metric-label">Budget Margin</span>
+        <div class="metric-row">
+          <strong id="sb-budget-remaining" class="metric-value tabular">$46.30 left</strong>
+        </div>
+      </div>
+
+      <button type="button" id="sb-proof-summary" class="status-metric metric-button" title="Jump to Lean 4 Formal Proofs">
+        <span class="metric-label">Lean 4 Kernel</span>
+        <span class="metric-row" id="sb-proof-counts">
+          <span class="proof-chip pass">✓ 5</span>
+          <span class="proof-chip fail">✕ 0</span>
+          <span class="proof-chip unknown">? 1</span>
+        </span>
+      </button>
+
+      <div class="status-metric">
+        <span class="metric-label">Design State</span>
+        <span id="sb-overall-status" class="overall-pill" role="status" aria-live="polite">✓ CANDIDATE</span>
+      </div>
+
+      <div class="statusbar-actions">
+        <button type="button" id="btn-undo" class="bar-btn" title="Undo to previous revision" disabled>
+          <svg aria-hidden="true"><use href="#undo"/></svg><span>Undo</span>
+        </button>
+        <button type="button" id="btn-reset-rev1" class="bar-btn" title="Reset design to Revision 1" disabled>Reset</button>
+        <button type="button" id="btn-toggle-compare" class="bar-btn" aria-pressed="false">Diff</button>
+        <button type="button" id="btn-export-json" class="bar-btn" title="Export versioned DeviceSpecification and verification report as JSON">
+          <svg aria-hidden="true"><use href="#download"/></svg><span>JSON</span>
+        </button>
+        <a id="btn-export-glb" class="bar-btn" download="forge-assembly.glb" title="Download 3D assembly as GLB">GLB</a>
+        <button type="button" id="btn-new-brief" class="bar-btn subtle-btn">New Brief</button>
+      </div>
+    </div>
+
+    <!-- Connection capabilities pill (shown on Landing / Research view) -->
+    <div id="Capabilities-pill" class="capabilities-group">
+      <span id="lean-badge" class="cap-pill" data-ready="false">Lean 4: checking…</span>
+      <span id="connection" class="connection" role="status"><i aria-hidden="true"></i><span>Checking Gemini…</span></span>
+    </div>
+  </header>
+
+  <main id="main">
+    <!-- 1. BRIEF COMPOSER / LANDING VIEW -->
+    <section id="brief-view" class="hero" aria-labelledby="title">
+      <div class="compose">
+        <p class="eyebrow">AUTONOMOUS HARDWARE CAD · LEAN 4 VERIFIED · LIVE PROCUREMENT</p>
+        <h1 id="title">Describe a device.<br>Engineer every trade-off.</h1>
+        <p class="lede">Gemini agents source real SKUs, generate parametric 3D enclosures, prove electrical &amp; budget invariants in Lean 4, and price live merchant offers via Shop.dev.</p>
+
+        <form id="composer">
+          <div class="composer-shell">
+            <label for="brief">Hardware design brief</label>
+            <textarea id="brief" name="brief" rows="4" maxlength="4000" required autocomplete="off" aria-keyshortcuts="Control+Enter Meta+Enter" placeholder="Design a wrist-worn finger-gesture detector using muscle sensors for under $100 that sends gesture events to my laptop over Bluetooth Low Energy."></textarea>
+            <div class="form-tools">
+              <span id="brief-help" class="shortcut" aria-hidden="true"><kbd id="modifier">Ctrl</kbd><span>+</span><kbd>Enter</kbd></span>
+              <div class="launch-buttons">
+                <button id="run-sample" type="button" class="secondary-cta">
+                  <svg aria-hidden="true"><use href="#play"/></svg><span>Launch Offline Wristband Studio</span>
+                </button>
+                <button id="run" class="primary" type="submit">
+                  <span id="run-label">Research with Gemini</span>
+                  <svg aria-hidden="true"><use href="#arrow"/></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+        <p id="feedback" class="feedback" role="status" aria-live="polite"></p>
+
+        <div class="example-row">
+          <button id="fill-example" type="button" class="example">
+            <svg aria-hidden="true"><use href="#wave"/></svg><span>Fill BLE EMG wristband brief ($100)</span><svg class="example-arrow" aria-hidden="true"><use href="#corner"/></svg>
+          </button>
+          <button id="fill-tight-budget" type="button" class="example">
+            <span>Fill tight $80 BLE wristband brief</span>
+          </button>
+        </div>
+      </div>
+
+      <figure class="study">
+        <img src="/static/wristband.webp" width="1500" height="1000" alt="Exploded wristband concept with a circuit board suspended between the shell and a translucent cover." fetchpriority="high">
+        <div class="frame-mark frame-top" aria-hidden="true"></div>
+        <div class="frame-mark frame-bottom" aria-hidden="true"></div>
+        <figcaption>
+          <span>Interactive reference architecture</span>
+          <strong>ESP32-WROOM-32E + MyoWare 2.0 Parametric Assembly</strong>
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- 2. STREAMING AGENT RESEARCH MAP -->
+    <section id="research-view" class="research-view" aria-labelledby="research-title" hidden>
+      <div class="research-heading">
+        <div>
+          <h2 id="research-title" tabindex="-1">Autonomous Research &amp; Verification Pipeline</h2>
+          <p id="map-brief" class="map-brief"></p>
+        </div>
+        <div class="research-actions">
+          <button id="stop-research" class="example" type="button" hidden>Stop run</button>
+          <button id="edit-brief" class="example" type="button" hidden>Edit brief</button>
+          <button id="open-workbench-btn" class="primary" type="button" hidden>
+            Open Engineering Studio <svg aria-hidden="true"><use href="#arrow"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="research-console">
+        <div class="research-toolbar">
+          <p id="map-status" class="map-status" role="status"><span class="map-status-dot" aria-hidden="true"></span><span>Starting research</span></p>
+          <span id="map-mode" class="map-mode"></span>
+        </div>
+        <div class="research-layout">
+          <div class="map-panel">
+            <div id="map-viewport" class="map-viewport">
+              <div id="map-network" class="map-network" role="group" aria-label="Research and build decisions">
+                <svg id="map-wires" class="map-wires" aria-hidden="true"></svg>
+              </div>
+            </div>
+            <div class="map-zoom" aria-label="Graph zoom">
+              <button type="button" class="zoom-button" id="map-out" aria-label="Zoom out">−</button>
+              <button type="button" class="zoom-button zoom-fit" id="map-fit" aria-label="Reset graph zoom">100%</button>
+              <button type="button" class="zoom-button" id="map-in" aria-label="Zoom in">+</button>
+            </div>
+          </div>
+          <aside id="map-inspector" class="map-inspector" aria-label="Decision details" tabindex="-1">
+            <div class="map-inspector-tools">
+              <strong>Stage Inspection</strong>
+              <button type="button" id="map-follow" class="map-follow" aria-pressed="true">Follow live</button>
+            </div>
+            <div id="map-detail" class="map-detail"></div>
+            <div class="map-activity">
+              <h3>Stream log</h3>
+              <ol id="map-log" aria-label="Research events"></ol>
+            </div>
+            <button id="map-back" class="example map-back" type="button">Back to graph</button>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. BLOCKED / UNSUPPORTED REPORT FALLBACK VIEW -->
+    <section id="blocked-view" class="results" aria-labelledby="blocked-title" hidden>
+      <div class="result-top">
+        <div>
+          <h2 id="blocked-title" tabindex="-1">Research Report — Build Blocked</h2>
+          <p id="blocked-mode" class="result-mode"></p>
+        </div>
+        <div class="research-actions">
+          <button id="blocked-edit-brief" class="primary" type="button">Revise Design Brief</button>
+        </div>
+      </div>
+      <p id="blocked-brief" class="result-brief"></p>
+      <div class="report-grid">
+        <section><h3>Compatibility &amp; Scope Findings</h3><ul id="blocked-findings"></ul></section>
+        <section><h3>Recommended Engineering Next Steps</h3><ul id="blocked-next-steps"></ul></section>
+      </div>
+    </section>
+
+    <!-- 4. INTERACTIVE HARDWARE ENGINEERING WORKBENCH -->
+    <section id="workbench-view" class="workbench" aria-label="Hardware Engineering Workspace" hidden>
+      <!-- Revision Comparison Banner (toggleable or auto-shown on edits) -->
+      <div id="diff-banner" class="diff-banner" hidden>
+        <div class="diff-header">
+          <div class="diff-controls">
+            <strong>Revision Comparison</strong>
+            <label for="compare-from" class="sr-only">Compare from revision</label>
+            <select id="compare-from" class="compact-select"></select>
+            <span aria-hidden="true">→</span>
+            <label for="compare-to" class="sr-only">Compare to revision</label>
+            <select id="compare-to" class="compact-select"></select>
+          </div>
+          <button type="button" id="close-diff-banner" class="icon-close" aria-label="Hide revision comparison">✕</button>
+        </div>
+        <div id="diff-columns" class="diff-columns"></div>
+      </div>
+
+      <!-- 3-Column Core Workspace -->
+      <div class="workbench-grid">
+        <!-- LEFT PANEL: Design Configuration & Live BOM -->
+        <aside class="panel panel-left" aria-label="Design Configuration and Bill of Materials">
+          <div class="panel-scroll">
+            <!-- Section 1: Requirements & Budget -->
+            <section class="cfg-section" aria-labelledby="sec-req-heading">
+              <div class="sec-head">
+                <h2 id="sec-req-heading">Requirements &amp; Budget</h2>
+                <span id="edit-sync-indicator" class="sync-indicator" role="status" aria-live="polite"></span>
+              </div>
+
+              <div class="field-grid">
+                <div class="field">
+                  <label for="cfg-transport">Connectivity</label>
+                  <select id="cfg-transport">
+                    <option value="ble">Bluetooth Low Energy (BLE)</option>
+                    <option value="wifi">Wi-Fi (2.4 GHz)</option>
+                    <option value="wired">Wired USB / Serial</option>
+                    <option value="wireless">Generic Wireless</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label for="cfg-budget-dollars">Parts Budget (USD)</label>
+                  <div class="inline-group">
+                    <select id="cfg-budget-mode" aria-label="Budget comparison mode" class="narrow-select">
+                      <option value="exclusive">Under (&lt;)</option>
+                      <option value="inclusive">At most (≤)</option>
+                    </select>
+                    <div class="unit-input">
+                      <span class="prefix">$</span>
+                      <input id="cfg-budget-dollars" type="number" min="1" max="10000" step="1" inputmode="decimal" placeholder="100">
+                    </div>
+                    <button type="button" id="btn-apply-budget" class="mini-btn">Set</button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="field">
+                <label for="cfg-gestures">Target Gestures</label>
+                <div class="inline-group">
+                  <input id="cfg-gestures" type="text" class="text-input" maxlength="200" placeholder="idle, flex, pinch">
+                  <button type="button" id="btn-apply-gestures" class="mini-btn">Save</button>
+                </div>
+              </div>
+            </section>
+
+            <!-- Section 2: Parametric Enclosure & Fit -->
+            <section class="cfg-section" aria-labelledby="sec-mech-heading">
+              <div class="sec-head">
+                <h2 id="sec-mech-heading">Enclosure &amp; Ergonomics</h2>
+                <span class="unit-tag">Parametric CAD (mm)</span>
+              </div>
+
+              <div class="field">
+                <div class="label-row">
+                  <label for="cfg-wrist-slider">Wrist Circumference</label>
+                  <span id="wrist-live-readout" class="tabular readout">170 mm</span>
+                </div>
+                <div class="slider-row">
+                  <input id="cfg-wrist-slider" type="range" min="120" max="240" step="1" value="170">
+                  <div class="unit-input small-num">
+                    <input id="cfg-wrist-input" type="number" min="120" max="240" step="1" aria-label="Wrist circumference in millimeters">
+                    <span class="suffix">mm</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="field-two-col">
+                <div class="field">
+                  <label for="cfg-wall-input">Wall (1.2–4 mm)</label>
+                  <div class="unit-input">
+                    <input id="cfg-wall-input" type="number" min="1.2" max="4.0" step="0.1">
+                    <span class="suffix">mm</span>
+                  </div>
+                </div>
+                <div class="field">
+                  <label for="cfg-clearance-input">Clearance (0.8–4 mm)</label>
+                  <div class="unit-input">
+                    <input id="cfg-clearance-input" type="number" min="0.8" max="4.0" step="0.1">
+                    <span class="suffix">mm</span>
+                  </div>
+                </div>
+              </div>
+              <p id="cfg-error-msg" class="inline-error" role="alert" hidden></p>
+            </section>
+
+            <!-- Section 3: Components & Live BOM -->
+            <section class="cfg-section" aria-labelledby="sec-bom-heading">
+              <div class="sec-head">
+                <h2 id="sec-bom-heading">Components &amp; Live BOM</h2>
+                <button type="button" id="btn-bom-shop-search" class="mini-btn accent-outline" title="Search live merchant offers on Shop.dev">
+                  <svg aria-hidden="true"><use href="#bag"/></svg><span>Shop.dev</span>
+                </button>
+              </div>
+
+              <div class="field">
+                <label for="cfg-controller">Controller Board</label>
+                <select id="cfg-controller"></select>
+              </div>
+
+              <div id="bom-list" class="bom-list" role="list" aria-label="Bill of materials"></div>
+
+              <div class="bom-totals">
+                <div class="total-row">
+                  <span>Catalog Reference Subtotal</span>
+                  <strong id="bom-cat-subtotal" class="tabular">$53.70</strong>
+                </div>
+                <div class="total-row primary-total">
+                  <span>Effective Known Hardware</span>
+                  <strong id="bom-known-subtotal" class="tabular">$53.70</strong>
+                </div>
+                <div id="bom-deltas" class="bom-deltas" aria-live="polite"></div>
+                <p id="bom-disclaimer" class="bom-disclaimer"></p>
+              </div>
+            </section>
+
+            <!-- Section 4: Electrical & Pin Wiring -->
+            <details class="cfg-section cfg-details" id="electrical-details" open>
+              <summary class="sec-summary">
+                <span>Electrical &amp; GPIO Wiring</span>
+                <span class="unit-tag">Lean 4 Checked</span>
+              </summary>
+              <div class="details-body">
+                <div class="field">
+                  <label for="cfg-rail">Sensor Supply Rail (VIN)</label>
+                  <select id="cfg-rail">
+                    <option value="3300">3300 mV (3.3V Regulated)</option>
+                    <option value="5000">5000 mV (5V USB / VBUS)</option>
+                  </select>
+                </div>
+
+                <div class="field">
+                  <label for="cfg-sig-pin-1">EMG Ch 1 Analog Pin</label>
+                  <select id="cfg-sig-pin-1"></select>
+                </div>
+
+                <div class="field" id="field-sig-pin-2" hidden>
+                  <label for="cfg-sig-pin-2">EMG Ch 2 Analog Pin</label>
+                  <select id="cfg-sig-pin-2"></select>
+                </div>
+
+                <div class="field">
+                  <label for="cfg-led-pin">Status LED Output Pin</label>
+                  <select id="cfg-led-pin"></select>
+                </div>
+
+                <div class="preset-box">
+                  <span class="preset-caption">Demo fault injection:</span>
+                  <button type="button" id="btn-inject-fault" class="mini-btn danger-outline">
+                    Inject 5V + GPIO Conflict
+                  </button>
+                </div>
+              </div>
+            </details>
+          </div>
+        </aside>
+
+        <!-- CENTER PANEL: Interactive 3D CAD Workspace -->
+        <section class="panel panel-center" aria-label="3D Assembly Viewport">
+          <div class="viewport-hud-top">
+            <div class="hud-badges">
+              <span id="hud-rev-tag" class="hud-pill strong">Rev 1 · Parametric Assembly</span>
+              <span id="hud-envelope-tag" class="hud-pill tabular">44.6 × 14.9 × 57.8 mm</span>
+              <span id="hud-fit-tag" class="hud-pill pass">✓ Clearance OK</span>
+            </div>
+            <div id="hud-busy" class="hud-pill busy" hidden>Regenerating 3D…</div>
+          </div>
+
+          <div id="geometry-warning-banner" class="canvas-warning" role="alert" hidden></div>
+
+          <div id="assembly-canvas" class="assembly-canvas"></div>
+          <p id="viewport-status" class="viewport-status" role="status"></p>
+
+          <div class="viewport-bottom-stack">
+            <!-- Assembly Scene Object Strip (Quick select any 3D group) -->
+            <div id="scene-object-bar" class="scene-object-bar" role="toolbar" aria-label="Selectable 3D assembly components"></div>
+
+            <div id="viewport-controls" class="viewport-controls">
+              <span class="view-mode-note" title="Camera, explode, and wireframe are visual inspection controls; dimensional edits live in the left panel.">
+                View only:
+              </span>
+              <button id="explode-view" class="view-button" type="button" aria-pressed="true">Exploded</button>
+              <button id="wireframe-view" class="view-button" type="button" aria-pressed="false">Wireframe</button>
+              <span class="hud-divider" aria-hidden="true"></span>
+              <button type="button" class="view-button" data-cam="iso">Iso</button>
+              <button type="button" class="view-button" data-cam="top">Top</button>
+              <button type="button" class="view-button" data-cam="front">Front</button>
+              <button id="reset-view" class="view-button" type="button">Fit</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- RIGHT PANEL: Contextual Engineering Inspector -->
+        <aside class="panel panel-right" aria-label="Contextual Engineering Inspector">
+          <div class="inspector-tabs" role="tablist" aria-label="Engineering Inspector Views">
+            <button type="button" role="tab" id="tab-btn-part" aria-controls="tab-part" aria-selected="true" class="tab-btn">
+              Selection
+            </button>
+            <button type="button" role="tab" id="tab-btn-proofs" aria-controls="tab-proofs" aria-selected="false" class="tab-btn">
+              Lean 4 <span id="tab-proof-badge" class="tab-count"></span>
+            </button>
+            <button type="button" role="tab" id="tab-btn-shop" aria-controls="tab-shop" aria-selected="false" class="tab-btn">
+              Shop.dev <span id="tab-shop-badge" class="tab-count"></span>
+            </button>
+          </div>
+
+          <div class="panel-scroll">
+            <!-- TAB 1: Selected Component / Node Inspector -->
+            <div id="tab-part" role="tabpanel" aria-labelledby="tab-btn-part" class="tab-panel">
+              <div id="part-inspector-content"></div>
+            </div>
+
+            <!-- TAB 2: Lean 4 Formal Verification & Autonomous Gemini Repair -->
+            <div id="tab-proofs" role="tabpanel" aria-labelledby="tab-btn-proofs" class="tab-panel" hidden>
+              <div class="proof-header-card">
+                <div class="proof-meta-row">
+                  <strong id="proof-kernel-label">Lean 4 Formal Kernel</strong>
+                  <span id="proof-rev-stamp" class="rev-pill">Rev 1</span>
+                </div>
+                <p class="proof-disclaimer">
+                  Proves mathematical electrical, pin, transport, and budget invariants derived from sourced component records. Does not prove physical skin-electrode SNR, RF detuning, or thermal behavior.
+                </p>
+              </div>
+
+              <!-- Autonomous Repair Action Box (shown when failed_count > 0) -->
+              <div id="repair-card" class="repair-card" hidden>
+                <div class="repair-card-head">
+                  <svg aria-hidden="true"><use href="#spark"/></svg>
+                  <strong>Autonomous Engineering Repair</strong>
+                </div>
+                <p id="repair-prompt-copy">Formal verification refuted one or more electrical or pin constraints. Run bounded AI repair to propose a compliant patch and re-verify in Lean 4.</p>
+                <div class="repair-actions">
+                  <button type="button" id="btn-repair-live" class="primary small-primary">
+                    Repair with Gemini
+                  </button>
+                  <button type="button" id="btn-repair-sample" class="mini-btn">
+                    Scripted Offline Repair
+                  </button>
+                </div>
+              </div>
+
+              <div id="repair-outcome-banner" class="repair-outcome" role="status" hidden></div>
+
+              <div id="obligations-list" class="obligations-list"></div>
+
+              <details class="raw-lean-drawer">
+                <summary>View Generated Lean 4 Source &amp; Kernel Proof Script</summary>
+                <pre id="raw-lean-code" class="code-block"></pre>
+              </details>
+            </div>
+
+            <!-- TAB 3: Shop.dev Live Procurement -->
+            <div id="tab-shop" role="tabpanel" aria-labelledby="tab-btn-shop" class="tab-panel" hidden>
+              <div class="shop-search-box">
+                <div class="sec-head">
+                  <h2>Live Merchant Offers</h2>
+                  <span class="unit-tag">mcp.shop.com</span>
+                </div>
+                <p class="shop-note">
+                  Searches live Shopify merchants via read-only Shop MCP. Selecting a retailer offer updates unit pricing without altering your engineering SKU. Checkout never runs automatically.
+                </p>
+                <div class="inline-group">
+                  <label for="shop-part-filter" class="sr-only">Target BOM Part</label>
+                  <select id="shop-part-filter"></select>
+                  <button type="button" id="btn-search-all-shop" class="primary small-primary">
+                    Search BOM Offers
+                  </button>
+                </div>
+                <div class="inline-group shop-custom-row">
+                  <label for="shop-custom-query" class="sr-only">Custom search query</label>
+                  <input id="shop-custom-query" type="text" class="text-input" maxlength="120" placeholder="Optional custom query for selected part…">
+                  <button type="button" id="btn-search-custom-shop" class="mini-btn">Query</button>
+                </div>
+                <p id="shop-status-msg" class="sync-indicator" role="status" aria-live="polite"></p>
+              </div>
+
+              <div id="shop-results-container" class="shop-results"></div>
+            </div>
+          </div>
+        </aside>
+      </div>
+
+      <!-- BOTTOM DRAWER: Live Agent, Verification & Revision Timeline -->
+      <section class="panel-bottom" id="activity-drawer" data-expanded="false" aria-label="Engineering and Agent Activity Timeline">
+        <div class="drawer-bar">
+          <button type="button" id="btn-toggle-drawer" class="drawer-toggle" aria-expanded="false" aria-controls="drawer-content">
+            <span class="drawer-caret" aria-hidden="true">▸</span>
+            <strong>Activity &amp; Trace</strong>
+            <span id="drawer-latest-summary" class="drawer-latest">Ready</span>
+          </button>
+          <div class="drawer-actions">
+            <span id="drawer-count-badge" class="unit-tag">0 events</span>
+            <button type="button" id="btn-show-research-graph" class="mini-btn">Agent DAG</button>
+          </div>
+        </div>
+        <div id="drawer-content" class="drawer-content" hidden>
+          <ol id="activity-timeline" class="activity-timeline"></ol>
+        </div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>
