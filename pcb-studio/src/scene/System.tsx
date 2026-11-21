@@ -4,7 +4,7 @@
 import { memo, useCallback, useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { useFrame, useThree } from '@react-three/fiber'
-import { CameraControls, Html } from '@react-three/drei'
+import { CameraControls } from '@react-three/drei'
 import { byId } from '@/data/catalog'
 import type { Board } from '@/data/board'
 import type { Bus, SystemDesign, SystemDevice } from '@/data/system'
@@ -14,6 +14,7 @@ import { buildDevice } from './devices'
 import { partHeight } from './packages'
 import { BoardMesh, ExportBridge, Parts } from './Scene'
 import { handoff, takeHandoff } from './handoff'
+import { ProjectedLabel } from './ProjectedLabel'
 
 export const BUS_COLOR: Record<Bus, string> = {
   power: '#d9564f',
@@ -187,12 +188,7 @@ const Pcb = memo(function Pcb({ sys }: { sys: SystemDesign }) {
           <meshBasicMaterial color="#ffffff" transparent opacity={0} depthWrite={false} />
         </mesh>
         {showLabel && (
-          <Html position={[0, 18, 0]} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
-            <div className={`forge-tag ${selected ? 'is-active' : ''}`}>
-              <span>{board.name}</span>
-              <span className="forge-tag-sub">Click again to open</span>
-            </div>
-          </Html>
+          <ProjectedLabel position={[0, 18, 0]} title={board.name} subtitle="Click again to open" active={selected} />
         )}
       </group>
     </>
@@ -303,21 +299,14 @@ const Device = memo(function Device({
         <meshBasicMaterial color={highlightColor} transparent opacity={0} side={THREE.DoubleSide} depthWrite={false} />
       </mesh>
       {showLabel && (
-        <Html
+        <ProjectedLabel
           position={
             d.stand
               ? [0, 5, item.dimensions.h / 2 + 12]
               : [d.bus === 'motor' ? -item.dimensions.w * 0.25 : 0, tagHeight + 10, 0]
           }
-          center
-          zIndexRange={[20, 0]}
-          style={{ pointerEvents: 'none' }}
-        >
-          <div className={`forge-tag ${selected ? 'is-active' : ''}`}>
-            <span>{d.label}</span>
-            <span className="forge-tag-sub">{item.name}</span>
-          </div>
-        </Html>
+          title={d.label} active={selected}
+        />
       )}
     </group>
   )

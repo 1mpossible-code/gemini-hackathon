@@ -78,7 +78,7 @@ export function ScaleTransition() {
       if (busy || getStudio().scale === next) return
       busy = true
       setTo(next)
-      // Unmount any active 3D <Html> portals cleanly before swapping the Three.js scene tree
+      // Clear stale selection before swapping the scene.
       setStudio({ selected: null, device: null, hovered: null, hoveredDevice: null })
       setTimeout(() => setStudio({ scale: next, exploded: false }), 240)
       setTimeout(() => {
@@ -353,19 +353,20 @@ function DeviceDetail({ dev }: { dev: SystemDevice }) {
             ? matchingCount > 1
               ? `Switch all ${matchingCount} to ${suggestedAlt.item.name.split(' ')[0]}`
               : `Switch to ${suggestedAlt.item.name}`
-            : undefined
+            : check.severity === 'warning' ? 'Review board wiring' : undefined
         }
         onAction={
           suggestedAlt
             ? () => commitSystemSwap(dev.id, suggestedAlt.item.id, { applyToMatching: matchingCount > 1 })
-            : undefined
+            : check.severity === 'warning' ? () => goScale('board') : undefined
         }
       />
 
       {fidelity.kind === 'proxy' && (
-        <div className="mt-2 rounded-md border border-border bg-muted/40 px-2.5 py-1.5 text-[11px] text-muted-foreground">
-          {fidelity.note}
-        </div>
+        <details className="mt-2 text-[11px] text-muted-foreground">
+          <summary className="cursor-pointer">3D model details</summary>
+          <p className="mt-1">{fidelity.note}</p>
+        </details>
       )}
 
       <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border text-xs">
@@ -383,7 +384,7 @@ function DeviceDetail({ dev }: { dev: SystemDevice }) {
       </div>
 
       <div className="mt-5 flex items-center justify-between">
-        <span className="label-mono">Compatible replacements</span>
+        <span className="label-mono">Replacement options</span>
         <span className="label-mono tabular">{alts.length}</span>
       </div>
 
@@ -400,14 +401,14 @@ function DeviceDetail({ dev }: { dev: SystemDevice }) {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 text-xs font-medium">
                   <SeverityDot severity={a.severity} />
-                  <span className="truncate">{a.item.name}</span>
+                  <span className="leading-snug">{a.item.name}</span>
                 </div>
                 <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground tabular">
                   <span>{usd(a.price)}</span>
                   {!a.current && (
                     <span className={cn('inline-flex items-center', a.delta < 0 ? 'text-emerald-400' : 'text-muted-foreground')}>
                       {a.delta < 0 ? <ArrowDownRight className="size-3" /> : <ArrowUpRight className="size-3" />}
-                      {a.delta >= 0 ? '+' : '−'}{usd(Math.abs(a.delta))}
+                      {a.delta < 0 ? 'Save ' : 'Adds '}{usd(Math.abs(a.delta))} / part
                     </span>
                   )}
                   <span>· {a.item.voltage.min}–{a.item.voltage.max} V</span>
@@ -424,7 +425,7 @@ function DeviceDetail({ dev }: { dev: SystemDevice }) {
             </div>
 
             {a.warnings.length > 0 && (
-              <p className="mt-1.5 text-[11px] text-amber-300/90">{a.warnings[0]}</p>
+              <p className="mt-1.5 text-[11px] text-amber-300/90">{a.warnings.join(' · ')}</p>
             )}
             {!a.warnings.length && !a.current && a.reasons.length > 0 && (
               <p className="mt-1.5 text-[11px] text-muted-foreground">{a.reasons[a.reasons.length - 1]}</p>
@@ -433,7 +434,7 @@ function DeviceDetail({ dev }: { dev: SystemDevice }) {
             {!a.current && (
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <Button size="sm" variant="secondary" className="h-6 px-2.5 text-[11px]" onClick={() => commitSystemSwap(dev.id, a.item.id)}>
-                  <Repeat2 className="size-3" /> Replace
+                  <Repeat2 className="size-3" /> Replace one
                 </Button>
                 {matchingCount > 1 && (
                   <Button
@@ -721,7 +722,8 @@ function SystemPartsAndBuyTab() {
         <span className="label-mono shrink-0">Budget ($)</span>
         <Input
           type="number"
-          min="1"
+          aria-label="Budget in dollars"
+          min="0"
           step="1"
           value={budgetUsd ?? ''}
           placeholder="No cap"

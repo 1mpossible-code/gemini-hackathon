@@ -139,6 +139,7 @@ function TopBar() {
   const checksOpen = useStudio((s) => s.checksOpen)
   const historyLen = useStudio((s) => s.history.length)
   const selectedOffers = useStudio((s) => s.selectedOfferByMpn)
+  const budget = useStudio((s) => s.budgetUsd)
 
   const health = useMemo(() => analyzeSystem(sys, board), [sys, board])
   const devCost = useMemo(() => computeSystemDevicesCost(sys, selectedOffers).totalUsd, [sys, selectedOffers])
@@ -221,6 +222,9 @@ function TopBar() {
           >
             <span>{usd(shownCost)}</span>
             <span className="text-[10px] text-muted-foreground">parts</span>
+            {budget != null && shownCost > budget && (
+              <span className="text-[11px] font-semibold text-amber-300" role="status">{usd(shownCost - budget)} over budget</span>
+            )}
           </button>
         </div>
       )}
@@ -1085,7 +1089,8 @@ function BomAndShopPanel() {
         <span className="label-mono shrink-0">Budget ($)</span>
         <Input
           type="number"
-          min="1"
+          aria-label="Budget in dollars"
+          min="0"
           step="1"
           value={budgetUsd ?? ''}
           placeholder="No cap"
