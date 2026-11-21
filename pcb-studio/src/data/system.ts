@@ -1,6 +1,7 @@
 // System-scale assembly: the custom PCB plus the off-board devices it drives.
 // Coordinates in mm, world X right, Z toward the viewer (rover front is -Z).
 import type { Board } from './board'
+import { checkHardware } from './hardwareAnalysis'
 import { byId, catalog, type CatalogItem } from './catalog'
 
 export type Bus = 'power' | 'motor' | 'i2c' | 'gpio' | 'data'
@@ -76,7 +77,7 @@ export const defaultSystem: SystemDesign = {
     motor('m4', 'J5', 40, 78, 'Rear-right motor'),
     {
       id: 'bat',
-      catalogId: 'holder-18650',
+      catalogId: 'sparkfun-2s-2200',
       label: 'Battery pack',
       role: 'Main power input',
       bus: 'power',
@@ -180,148 +181,7 @@ export function modelFidelity(item: CatalogItem): { kind: 'detailed' | 'proxy'; 
  * Separates raw battery voltage, H-bridge driver supply (VM), PWM effective voltage,
  * and regulated board rails without hiding unverified assumptions.
  */
-export function analyzeDevice(dev: SystemDevice, board?: Board): DeviceCheck {
-  const item = byId[dev.catalogId]
-  if (!item) {
-    return {
-      deviceId: dev.id,
-      deviceLabel: dev.label,
-      severity: 'unverified',
-      headline: 'Component specifications missing',
-      explanation: 'No catalog specifications are available for this part.',
-      technicalDetail: `Catalog ID "${dev.catalogId}" was not found.`,
-    }
-  }
-
-  const hasDriverOnBoard = board ? board.parts.some((p) => /TB6612|DRV88|L298/i.test(`${p.name} ${p.mpn}`)) : true
-  const j7Has5v = board ? board.nets.some((n) => /^(VBUS|\+?5V)$/i.test(n.name) && n.path.some((pt) => pt.startsWith(`${dev.port}.`))) : false
-
-  // 1. Motor drive path: battery VIN -> TB6612FNG VM -> H-bridge output terminals
-  if (dev.bus === 'motor') {
-    if (item.voltage.max < dev.rail - 0.05) {
-      return {
-        deviceId: dev.id,
-        deviceLabel: dev.label,
-        severity: 'warning',
-        headline: 'Motor may receive more voltage than recommended',
-        explanation:
-          `This motor is rated for ${item.voltage.min}–${item.voltage.max} V, while the motor driver is powered from the ${dev.rail} V battery rail. ` +
-          'Because the H-bridge switches battery voltage directly instead of regulating it, full-duty PWM can overdrive the motor. Swap to a 6–12 V motor or cap PWM duty in firmware.',
-        technicalDetail:
-          `Path: Battery (${dev.rail} V nominal, up to 8.4 V charged) → ${hasDriverOnBoard ? 'TB6612FNG H-bridge (VM)' : 'motor driver'} → ${dev.port} terminals. ` +
-          `Catalog rating: ${item.voltage.min}–${item.voltage.max} V, ~${item.currentMa} mA running (stall current can exceed 1 A).`,
-        suggestedCatalogId: 'jga25-370-12v',
-      }
-    }
-    if (item.voltage.min > dev.rail + 0.05) {
-      return {
-        deviceId: dev.id,
-        deviceLabel: dev.label,
-        severity: 'warning',
-        headline: 'Supply rail may be below motor minimum voltage',
-        explanation: `This motor expects at least ${item.voltage.min} V, but the driver supply rail is ${dev.rail} V nominal.`,
-        technicalDetail: `Motor range ${item.voltage.min}–${item.voltage.max} V vs ${dev.rail} V VM rail on ${dev.port}.`,
-      }
-    }
-    // Voltage range matches, check current/stall caveats honestly
-    if (item.id === 'jga25-370-12v') {
-      return {
-        deviceId: dev.id,
-        deviceLabel: dev.label,
-        severity: 'unverified',
-        headline: 'Voltage compatible · verify stall current',
-        explanation:
-          `Operating range (${item.voltage.min}–${item.voltage.max} V) safely covers the ${dev.rail} V driver rail. ` +
-          'Stall current (~2 A) can exceed the TB6612FNG 1.2 A continuous channel rating, so verify current limiting under load.',
-        technicalDetail:
-          `VM = ${dev.rail} V (within ${item.voltage.min}–${item.voltage.max} V). Running ~${item.currentMa} mA; stall ~2 A vs TB6612FNG 1.2 A continuous / 3.2 A peak.`,
-      }
-    }
-    return {
-      deviceId: dev.id,
-      deviceLabel: dev.label,
-      severity: item.approx ? 'unverified' : 'ok',
-      headline: item.approx ? 'Voltage compatible · specs approximate' : 'Compatible with motor rail',
-      explanation: `Rated for ${item.voltage.min}–${item.voltage.max} V, matching the ${dev.rail} V driver rail on ${dev.port}.`,
-      technicalDetail: `Driver VM ${dev.rail} V within ${item.voltage.min}–${item.voltage.max} V; nominal current ${item.currentMa} mA.`,
-    }
-  }
-
-  // 2. Main power input (battery pack)
-  if (dev.bus === 'power') {
-    if (item.voltage.max < 6) {
-      return {
-        deviceId: dev.id,
-        deviceLabel: dev.label,
-        severity: 'warning',
-        headline: 'Single-cell holder cannot supply 7.4 V alone',
-        explanation:
-          `The selected ${item.name} holds one cell (${item.voltage.min}–${item.voltage.max} V), but the controller power input expects 6–12 V (7.4 V nominal 2S pack) for the 3.3 V regulator and motors.`,
-        technicalDetail:
-          `Catalog item ${item.mpn}: ${item.voltage.min}–${item.voltage.max} V (1S). Board input ${dev.port} requires 6–12 V (AMS1117-3.3 dropout minimum ~4.6 V). Use two cells in series or a 2S pack.`,
-      }
-    }
-    return {
-      deviceId: dev.id,
-      deviceLabel: dev.label,
-      severity: 'ok',
-      headline: 'Matches board power input range',
-      explanation: `Supplies ${item.voltage.min}–${item.voltage.max} V to the main power terminal (${dev.port}).`,
-      technicalDetail: `Connector ${dev.port}, nominal rail ${dev.rail} V.`,
-    }
-  }
-
-  // 3. Peripherals on board headers (I2C / GPIO / Data)
-  const needs5v = item.voltage.min > 3.6
-  const highLogic = item.voltage.logic > 3.6
-  if (needs5v && !j7Has5v) {
-    return {
-      deviceId: dev.id,
-      deviceLabel: dev.label,
-      severity: 'warning',
-      headline: highLogic ? 'Needs 5 V power and 3.3 V signal protection' : 'Needs dedicated 5 V power supply',
-      explanation:
-        highLogic
-          ? `${item.name} requires ${item.voltage.min}–${item.voltage.max} V and outputs ${item.voltage.logic} V signals. The current header (${dev.port}) only routes 3.3 V, and ESP32 pins are 3.3 V max.`
-          : `${item.name} requires ${item.voltage.min}–${item.voltage.max} V, but the ${dev.port} header on the current PCB only supplies 3.3 V. Add a 5 V buck supply or pick a 3.3 V sensor.`,
-      technicalDetail:
-        `Device supply ${item.voltage.min}–${item.voltage.max} V (logic ${item.voltage.logic} V). Board ${dev.port} routes +3V3 only; no 5 V regulator on ${dev.port}.`,
-      suggestedCatalogId: dev.id === 'sonar' ? 'vl53l0x' : undefined,
-    }
-  }
-
-  if (item.voltage.min > dev.rail + 0.05 || item.voltage.max < dev.rail - 0.05) {
-    return {
-      deviceId: dev.id,
-      deviceLabel: dev.label,
-      severity: 'warning',
-      headline: 'Operating voltage does not match assigned rail',
-      explanation: `Rated for ${item.voltage.min}–${item.voltage.max} V, while the assigned power rail is ${dev.rail} V.`,
-      technicalDetail: `Rail ${dev.rail} V on ${dev.port} vs device ${item.voltage.min}–${item.voltage.max} V.`,
-    }
-  }
-
-  if (highLogic) {
-    return {
-      deviceId: dev.id,
-      deviceLabel: dev.label,
-      severity: 'warning',
-      headline: 'Signal voltage exceeds 3.3 V controller pins',
-      explanation: `Outputs ${item.voltage.logic} V logic, which needs a level shifter or voltage divider before connecting to the 3.3 V ESP32.`,
-      technicalDetail: `Device logic ${item.voltage.logic} V > ESP32 3.6 V abs max on ${dev.port}.`,
-    }
-  }
-
-  return {
-    deviceId: dev.id,
-    deviceLabel: dev.label,
-    severity: 'ok',
-    headline: 'Compatible with board power and signals',
-    explanation: `Runs safely on the ${dev.rail} V rail with 3.3 V-compatible signals on ${dev.port}.`,
-    technicalDetail:
-      `Supply ${item.voltage.min}–${item.voltage.max} V, logic ${item.voltage.logic} V, typical draw ${item.currentMa} mA (${dev.bus.toUpperCase()} on ${dev.port}).`,
-  }
-}
+export const analyzeDevice = checkHardware
 
 export function analyzeSystem(sys: SystemDesign, board?: Board): SystemHealth {
   const checksByDevice: Record<string, DeviceCheck> = {}
@@ -384,12 +244,12 @@ export function alternativesFor(dev: SystemDevice, board?: Board): Alternative[]
     const warnings: string[] = []
 
     if (isCur) reasons.push('Currently selected')
-    if (listed) reasons.push('Recommended alternative')
+    if (listed) reasons.push('Catalog alternative; verify wiring and mechanics')
     if (shared.length) reasons.push(`Uses ${shared.map((s) => s.toUpperCase()).join(' / ')}`)
     if (candidateCheck.severity === 'ok') {
       reasons.push(candidateCheck.headline)
     } else if (candidateCheck.severity === 'unverified') {
-      reasons.push(`Fits ${dev.rail} V range`)
+      reasons.push(candidateCheck.headline)
       warnings.push(candidateCheck.headline)
     } else {
       warnings.push(candidateCheck.headline)

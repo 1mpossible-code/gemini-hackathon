@@ -2,12 +2,13 @@ import type { Part } from '@/data/board'
 import { boards } from './boards'
 import { generalParts, designRules } from './general'
 import { peripherals } from './peripherals'
+import { roverParts } from './rover'
 import type { CatalogCategory, CatalogItem } from './types'
 
 /** Bump when the static data changes. Safe to use as a cache key. */
-export const CATALOG_VERSION = '2026.11.21'
+export const CATALOG_VERSION = '2026.11.21-rover-2'
 
-export const catalog: CatalogItem[] = [...boards, ...peripherals, ...generalParts]
+export const catalog: CatalogItem[] = [...boards, ...peripherals, ...generalParts, ...roverParts]
 
 export const byId: Record<string, CatalogItem> = Object.fromEntries(
   catalog.map((item) => [item.id, item]),
