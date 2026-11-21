@@ -1,16 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
 import {
-  Box, Boxes, Check, ChevronRight, CircuitBoard, Cpu, Download, Expand, ExternalLink, FileJson,
-  Image as ImageIcon, Layers, Loader2, Maximize, Pause, Play, RotateCw, Search, ShieldCheck,
+  AlertTriangle, Box, Boxes, Cable, Check, CheckCircle2, ChevronRight, CircuitBoard, Cpu,
+  Download, Expand, ExternalLink, FileJson, Image as ImageIcon, Layers, Loader2,
+  Maximize, PanelLeftClose, PanelLeftOpen, Pause, Play, RotateCw, Search, ShieldCheck,
   ShoppingBag, Sparkles, Tag, Undo2, Wrench, X,
 } from 'lucide-react'
 import { PcbScene } from '@/scene/Scene'
 import {
-  commitBoardEdit, computeBoardBomCost, getStudio, requestExport, requestFit, setStudio,
-  undoBoardEdit, useStudio, type ExportFormat, type ShopOffer, type ShopSearchEntry,
+  commitBoardEdit, commitSystemSwap, computeBoardBomCost, computeSystemDevicesCost,
+  cycleLabelMode, getStudio, requestExport, requestFit, setStudio, undoLastEdit, useStudio,
+  type ExportFormat, type ShopOffer, type ShopSearchEntry,
 } from '@/state/studio'
 import type { Board, Part } from '@/data/board'
+import { byId } from '@/data/catalog'
+import { alternativesFor, analyzeDevice, analyzeSystem, unitPrice } from '@/data/system'
 import type { Verification as VerificationData } from '@/verify/types'
 import { routeNets, traceLength } from '@/pcb/footprint'
 import { Button } from '@/components/ui/button'
@@ -21,12 +25,10 @@ import { Tip, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { ResearchPane } from '@/components/Research'
 import { ScaleSwitch, ScaleTransition, SystemInspector, SystemLibrary, goScale } from '@/components/SystemPanels'
-import { systemCost } from '@/data/system'
 
 const ease = [0.16, 1, 0.3, 1] as const
+const usd = (n: number) => `$${n.toFixed(2)}`
 
-// Modules written by the generation / verification workers. Loaded lazily so the
-// studio still runs (offline) when they are absent.
 const aiModules = import.meta.glob('./ai/generate.ts')
 const verifyModules = import.meta.glob('./verify/verify.ts')
 
@@ -54,36 +56,179 @@ async function fetchShopSearch(p: { mpn: string; name: string; manufacturer: str
   return data
 }
 
+async function runBoardDesignChecks() {
+  setStudio({ verification: { status: 'running', theorems: [] } })
+  try {
+    const loader = verifyModules['./verify/verify.ts']
+    if (!loader) throw new Error('Design verification service unavailable')
+    const mod = (await loader()) as { verifyBoard: (b: Board) => Promise<VerificationData> }
+    const result = await mod.verifyBoard(getStudio().board)
+    setStudio({ verification: result })
+    return result
+  } catch (e) {
+    const fallback: VerificationData = {
+      status: 'failed',
+      theorems: [],
+      log: e instanceof Error ? e.message : String(e),
+    }
+    setStudio({ verification: fallback })
+    return fallback
+  }
+}
+
+async function runAiBoardRepair(): Promise<{ repaired: boolean; rationale: string }> {
+  const current = getStudio().board
+  const prevVer = getStudio().verification
+  const prevSys = getStudio().system
+  const res = await fetch('/api/repair', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ board: current, verification: prevVer }),
+  })
+  const data = (await res.json()) as {
+    repaired?: boolean
+    rationale?: string
+    board?: Board
+    verification?: VerificationData
+    error?: string
+  }
+  if (!res.ok || data.error || !data.board || !data.verification) {
+    throw new Error(data.error ?? `AI fix failed (HTTP ${res.status})`)
+  }
+  const passedCount = data.verification.theorems.filter((t) => t.ok).length
+  const totalCount = data.verification.theorems.length
+  setStudio((s) => ({
+    history: [
+      ...s.history.slice(-19),
+      {
+        system: JSON.parse(JSON.stringify(prevSys)),
+        board: JSON.parse(JSON.stringify(current)),
+        verification: prevVer,
+        budgetUsd: s.budgetUsd,
+        selectedOfferByMpn: { ...s.selectedOfferByMpn },
+        label: 'AI board fix',
+      },
+    ],
+    board: data.board!,
+    verification: data.verification!,
+    lastDiff: [
+      `AI updated board → Rev ${data.board!.revision}`,
+      data.repaired ? `All ${totalCount} design checks passed` : `${passedCount}/${totalCount} checks passed`,
+    ],
+    lastChange: {
+      id: Date.now(),
+      summary: data.repaired
+        ? `Fixed with AI (Rev ${data.board!.revision}) · All ${totalCount} design checks passed`
+        : `AI updated board (Rev ${data.board!.revision}) · ${totalCount - passedCount} issue(s) remain`,
+      tone: data.repaired ? 'ok' : 'warn',
+    },
+    touring: false,
+  }))
+  return {
+    repaired: Boolean(data.repaired),
+    rationale: data.rationale ?? 'Updated board routing and re-ran design checks.',
+  }
+}
+
 function TopBar() {
   const board = useStudio((s) => s.board)
   const sys = useStudio((s) => s.system)
   const scale = useStudio((s) => s.scale)
   const mode = useStudio((s) => s.mode)
+  const v = useStudio((s) => s.verification)
+  const checksOpen = useStudio((s) => s.checksOpen)
   const historyLen = useStudio((s) => s.history.length)
+  const selectedOffers = useStudio((s) => s.selectedOfferByMpn)
+
+  const health = useMemo(() => analyzeSystem(sys, board), [sys, board])
+  const devCost = useMemo(() => computeSystemDevicesCost(sys, selectedOffers).totalUsd, [sys, selectedOffers])
+  const pcbCost = useMemo(() => computeBoardBomCost(board, selectedOffers).totalUsd, [board, selectedOffers])
+  const shownCost = scale === 'system' ? devCost + pcbCost : pcbCost
+
+  const boardFailed = v.theorems.filter((t) => !t.ok).length
+  const totalIssues = (scale === 'system' ? health.warningCount : 0) + boardFailed
+  const checkSummary =
+    v.status === 'running'
+      ? { label: 'Checking changes…', tone: 'muted' as const }
+      : totalIssues > 0
+      ? { label: `${totalIssues} ${totalIssues === 1 ? 'issue' : 'issues'} need attention`, tone: 'warn' as const }
+      : v.status === 'passed' && health.unverifiedCount === 0
+      ? { label: 'Design checks passed', tone: 'ok' as const }
+      : { label: scale === 'system' ? 'Checks pending' : 'Run design checks', tone: 'muted' as const }
+
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-3">
+    <header className="flex h-12 shrink-0 items-center gap-2.5 border-b border-border px-3">
       <div className="flex items-center gap-2">
         <div className="grid size-7 place-items-center rounded-md bg-foreground text-background">
           <CircuitBoard className="size-4" strokeWidth={2.2} />
         </div>
         <span className="text-sm font-semibold tracking-tight">Forge</span>
-        <span className="label-mono hidden sm:inline">PCB Studio</span>
       </div>
+
       <ChevronRight className="size-3.5 text-muted-foreground" />
-      <button onClick={() => goScale('system')} className={cn('truncate text-sm', scale === 'system' ? 'text-foreground' : 'text-muted-foreground hover:text-foreground')}>{sys.name}</button>
+      <button
+        onClick={() => goScale('system')}
+        className={cn('truncate text-sm', scale === 'system' && mode === 'engineer' ? 'font-medium text-foreground' : 'text-muted-foreground hover:text-foreground')}
+      >
+        {sys.name}
+      </button>
       <AnimatePresence initial={false}>
-        {scale === 'board' && (
-          <motion.span key="crumb" initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }} transition={{ duration: 0.3, ease }} className="flex min-w-0 items-center gap-3">
+        {scale === 'board' && mode === 'engineer' && (
+          <motion.span
+            key="crumb"
+            initial={{ opacity: 0, x: -6 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -6 }}
+            transition={{ duration: 0.25, ease }}
+            className="flex min-w-0 items-center gap-2"
+          >
             <ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
-            <span className="truncate text-sm">{board.name}</span>
+            <span className="truncate text-sm font-medium">{board.name}</span>
           </motion.span>
         )}
       </AnimatePresence>
-      <Badge className="label-mono !text-foreground">Rev {board.revision}</Badge>
-      <div className="ml-auto flex items-center gap-2">
-        {mode === 'engineer' && scale === 'board' && historyLen > 0 && (
-          <Tip label="Undo last board edit">
-            <Button size="sm" variant="ghost" onClick={undoBoardEdit}>
+      <Badge className="label-mono hidden sm:inline-flex !text-foreground">Rev {board.revision}</Badge>
+
+      {mode === 'engineer' && (
+        <div className="ml-2 hidden items-center gap-1.5 lg:flex">
+          <button
+            onClick={() => setStudio({ checksOpen: !checksOpen })}
+            className={cn(
+              'inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs transition-colors',
+              checkSummary.tone === 'warn'
+                ? 'border-amber-400/35 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20'
+                : checkSummary.tone === 'ok'
+                ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20'
+                : 'border-border bg-secondary/50 text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {v.status === 'running' ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : checkSummary.tone === 'warn' ? (
+              <AlertTriangle className="size-3.5 text-amber-400" />
+            ) : checkSummary.tone === 'ok' ? (
+              <CheckCircle2 className="size-3.5 text-emerald-400" />
+            ) : (
+              <ShieldCheck className="size-3.5" />
+            )}
+            <span>{checkSummary.label}</span>
+          </button>
+
+          <button
+            onClick={() => setStudio(scale === 'system' ? { systemTab: 'bom' } : { inspectorTab: 'bom' })}
+            className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-secondary/40 px-2.5 font-mono text-xs text-foreground tabular hover:bg-accent"
+            title="Open Parts & cost"
+          >
+            <span>{usd(shownCost)}</span>
+            <span className="text-[10px] text-muted-foreground">parts</span>
+          </button>
+        </div>
+      )}
+
+      <div className="ml-auto flex items-center gap-1.5">
+        {mode === 'engineer' && historyLen > 0 && (
+          <Tip label="Undo last change">
+            <Button size="sm" variant="ghost" onClick={undoLastEdit}>
               <Undo2 className="size-3.5" /> Undo
             </Button>
           </Tip>
@@ -95,14 +240,145 @@ function TopBar() {
   )
 }
 
+function DesignChecksDrawer() {
+  const open = useStudio((s) => s.checksOpen)
+  const sys = useStudio((s) => s.system)
+  const board = useStudio((s) => s.board)
+  const v = useStudio((s) => s.verification)
+  const [fixing, setFixing] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+  const health = useMemo(() => analyzeSystem(sys, board), [sys, board])
+
+  if (!open) return null
+
+  const passed = v.theorems.filter((t) => t.ok).length
+  const failedTheorems = v.theorems.filter((t) => !t.ok)
+
+  const handleFixBoard = async () => {
+    setFixing(true)
+    setNote(null)
+    try {
+      const res = await runAiBoardRepair()
+      setNote(res.rationale)
+    } catch (e) {
+      setNote(e instanceof Error ? e.message : String(e))
+    } finally {
+      setFixing(false)
+    }
+  }
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.2, ease }}
+      className="absolute right-3 top-14 z-30 w-[min(420px,calc(100%-24px))] rounded-xl border border-border bg-popover/95 p-4 shadow-2xl backdrop-blur-md"
+      role="dialog"
+      aria-label="Design checks summary"
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="size-4" />
+          <h3 className="text-sm font-semibold">Design checks</h3>
+        </div>
+        <Button size="icon-sm" variant="ghost" onClick={() => setStudio({ checksOpen: false })} aria-label="Close design checks">
+          <X className="size-3.5" />
+        </Button>
+      </div>
+
+      {/* System electrical summary */}
+      <div className="mt-3 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="label-mono">Assembly electrical checks</span>
+          <span className="font-mono text-[10.5px] text-muted-foreground">
+            {health.warningCount} warnings · {health.unverifiedCount} unverified
+          </span>
+        </div>
+        {health.issues.length === 0 ? (
+          <div className="flex items-center gap-2 rounded-md border border-emerald-400/30 bg-emerald-500/10 p-2 text-xs text-emerald-200">
+            <CheckCircle2 className="size-4 text-emerald-400" />
+            All assembly connections look electrically compatible.
+          </div>
+        ) : (
+          <div className="max-h-40 space-y-1.5 overflow-y-auto">
+            {health.issues.map((issue) => (
+              <div key={issue.deviceId} className="rounded-md border border-border bg-card p-2 text-xs">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-medium">{issue.deviceLabel}</span>
+                  <button
+                    onClick={() => setStudio({ scale: 'system', device: issue.deviceId, systemTab: 'inspect', checksOpen: false })}
+                    className="font-mono text-[10.5px] text-muted-foreground underline hover:text-foreground"
+                  >
+                    Inspect
+                  </button>
+                </div>
+                <p className="mt-0.5 text-[11px] text-amber-200/90">{issue.headline}</p>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Board formal checks summary */}
+      <div className="mt-4 border-t border-border pt-3">
+        <div className="flex items-center justify-between gap-2">
+          <span className="label-mono">Circuit board checks</span>
+          <div className="flex items-center gap-1.5">
+            {failedTheorems.length > 0 && (
+              <Button size="sm" variant="default" className="h-7 text-xs" onClick={handleFixBoard} disabled={fixing || v.status === 'running'}>
+                {fixing ? <Loader2 className="size-3 animate-spin" /> : <Wrench className="size-3" />}
+                Fix with AI
+              </Button>
+            )}
+            <Button size="sm" variant="secondary" className="h-7 text-xs" onClick={runBoardDesignChecks} disabled={v.status === 'running' || fixing}>
+              {v.status === 'running' ? <Loader2 className="size-3 animate-spin" /> : 'Check now'}
+            </Button>
+          </div>
+        </div>
+
+        <p className="mt-1.5 text-xs text-muted-foreground">
+          {v.status === 'running'
+            ? 'Checking clearances, wiring, power limits, and thermals…'
+            : v.status === 'passed'
+            ? `All ${v.theorems.length} circuit board rules passed.`
+            : v.status === 'failed'
+            ? `${failedTheorems.length} of ${v.theorems.length} board checks failed (${failedTheorems.map((t) => t.name.replaceAll('_', ' ')).join(', ')}).`
+            : 'Circuit board formal checks have not been run on this revision yet.'}
+        </p>
+
+        {note && (
+          <p className="mt-2 rounded border border-border bg-muted/40 p-2 font-mono text-[10.5px] text-muted-foreground">{note}</p>
+        )}
+
+        {v.theorems.length > 0 && (
+          <details className="mt-2 text-[11px] text-muted-foreground">
+            <summary className="cursor-pointer font-mono hover:text-foreground">
+              Technical details (Lean 4 · {passed}/{v.theorems.length})
+            </summary>
+            <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto rounded border border-border bg-muted/30 p-2 font-mono text-[10.5px]">
+              {v.theorems.map((t) => (
+                <li key={t.name} className="flex items-center gap-2" title={t.statement}>
+                  {t.ok ? <Check className="size-3 text-emerald-400" /> : <X className="size-3 text-red-300" />}
+                  <span className={t.ok ? 'text-foreground' : 'text-red-300'}>{t.name}</span>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
 function ExportMenu() {
   const [open, setOpen] = useState(false)
   const items: { f: ExportFormat; label: string; sub: string; icon: typeof Box }[] = [
-    { f: 'stl', label: 'STL', sub: 'Print / enclosure fit', icon: Box },
-    { f: 'glb', label: 'GLB', sub: 'Full colour glTF', icon: Boxes },
-    { f: 'obj', label: 'OBJ', sub: 'Mesh for CAD import', icon: Layers },
-    { f: 'png', label: 'PNG', sub: 'Viewport render', icon: ImageIcon },
-    { f: 'json', label: 'BOM', sub: 'Parts, nets, proofs', icon: FileJson },
+    { f: 'stl', label: 'STL', sub: '3D print / enclosure fit', icon: Box },
+    { f: 'glb', label: 'GLB', sub: 'Full-color 3D model', icon: Boxes },
+    { f: 'obj', label: 'OBJ', sub: 'CAD mesh export', icon: Layers },
+    { f: 'png', label: 'PNG', sub: 'Viewport image', icon: ImageIcon },
+    { f: 'json', label: 'Parts & cost', sub: 'JSON BOM & checks', icon: FileJson },
   ]
   return (
     <div className="relative">
@@ -115,22 +391,22 @@ function ExportMenu() {
             initial={{ opacity: 0, y: -6, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -4, scale: 0.98 }}
-            transition={{ duration: 0.22, ease }}
+            transition={{ duration: 0.2, ease }}
             className="absolute right-0 top-10 z-50 w-60 origin-top-right rounded-lg border border-border bg-popover p-1 shadow-2xl"
           >
-            {items.map((it, i) => (
-              <motion.button
+            {items.map((it) => (
+              <button
                 key={it.f}
-                initial={{ opacity: 0, x: 6 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.03, duration: 0.25, ease }}
-                onClick={() => { requestExport(it.f); setOpen(false) }}
+                onClick={() => {
+                  requestExport(it.f)
+                  setOpen(false)
+                }}
                 className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left hover:bg-accent"
               >
                 <it.icon className="size-4 text-muted-foreground" />
                 <span className="text-sm font-medium">{it.label}</span>
                 <span className="ml-auto text-xs text-muted-foreground">{it.sub}</span>
-              </motion.button>
+              </button>
             ))}
           </motion.div>
         )}
@@ -143,6 +419,7 @@ function Library() {
   const board = useStudio((s) => s.board)
   const selected = useStudio((s) => s.selected)
   const hovered = useStudio((s) => s.hovered)
+  const open = useStudio((s) => s.leftPanelOpen)
   const [q, setQ] = useState('')
   const groups = useMemo(() => {
     const m = new Map<string, Part[]>()
@@ -153,15 +430,25 @@ function Library() {
     }
     return [...m]
   }, [board, q])
+
+  if (!open) return null
+
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-border max-lg:hidden">
+    <aside className="flex w-64 shrink-0 flex-col border-r border-border max-lg:hidden" aria-label="Board components">
       <div className="flex items-center justify-between px-3 pb-2 pt-3">
-        <span className="label-mono">Library</span>
-        <span className="label-mono tabular">{board.parts.length}</span>
+        <span className="label-mono">Board Parts</span>
+        <div className="flex items-center gap-1.5">
+          <span className="label-mono tabular">{board.parts.length}</span>
+          <Tip label="Hide parts list">
+            <Button size="icon-sm" variant="ghost" className="size-6" onClick={() => setStudio({ leftPanelOpen: false })} aria-label="Hide parts list">
+              <PanelLeftClose className="size-3.5" />
+            </Button>
+          </Tip>
+        </div>
       </div>
       <div className="relative px-3 pb-2">
         <Search className="pointer-events-none absolute left-5.5 top-2 size-3.5 text-muted-foreground" />
-        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search parts" className="h-8 pl-8 text-xs" />
+        <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search board parts" className="h-8 pl-8 text-xs" />
       </div>
       <div className="flex-1 overflow-y-auto px-1.5 pb-3">
         {groups.map(([cat, parts]) => (
@@ -170,7 +457,7 @@ function Library() {
             {parts.map((p) => (
               <button
                 key={p.ref}
-                onClick={() => setStudio({ selected: p.ref, touring: false })}
+                onClick={() => setStudio({ selected: p.ref, inspectorTab: 'inspect', touring: false })}
                 onMouseEnter={() => setStudio({ hovered: p.ref })}
                 onMouseLeave={() => setStudio({ hovered: null })}
                 className={cn(
@@ -180,10 +467,10 @@ function Library() {
                 )}
               >
                 {selected === p.ref && (
-                  <motion.span layoutId="lib-sel" transition={{ duration: 0.35, ease }} className="absolute inset-0 rounded-md bg-accent" />
+                  <motion.span layoutId="lib-sel" transition={{ duration: 0.3, ease }} className="absolute inset-0 rounded-md bg-accent" />
                 )}
-                <span className="relative w-9 font-mono text-[11px] text-foreground">{p.ref}</span>
-                <span className="relative truncate">{p.value ? `${p.value} · ${p.pkg}` : p.name}</span>
+                <span className="relative min-w-0 flex-1 truncate text-foreground">{p.name}</span>
+                <span className="relative shrink-0 font-mono text-[10px] text-muted-foreground">{p.ref}</span>
               </button>
             ))}
           </div>
@@ -195,87 +482,171 @@ function Library() {
 
 function Toolbar() {
   const view = useStudio((s) => s.view)
+  const scale = useStudio((s) => s.scale)
   const exploded = useStudio((s) => s.exploded)
   const showTraces = useStudio((s) => s.showTraces)
-  const showCallouts = useStudio((s) => s.showCallouts)
+  const showAllWires = useStudio((s) => s.showAllWires)
+  const labelMode = useStudio((s) => s.labelMode)
   const touring = useStudio((s) => s.touring)
   const views = ['3d', 'top', 'bottom'] as const
-  const scale = useStudio((s) => s.scale)
+  const labelCaption = labelMode === 'contextual' ? 'Focus' : labelMode === 'all' ? 'All' : 'Off'
+
   return (
     <motion.div
-      initial={{ opacity: 0, y: 16 }}
+      initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.6, duration: 0.6, ease }}
-      className="absolute bottom-4 left-1/2 z-10 flex -translate-x-1/2 items-center gap-1 rounded-xl border border-border bg-background/80 p-1 shadow-2xl backdrop-blur-md"
+      transition={{ duration: 0.35, ease }}
+      className="absolute bottom-4 left-1/2 z-10 flex max-w-[calc(100%-16px)] -translate-x-1/2 items-center gap-1 overflow-x-auto rounded-xl border border-border bg-background/85 p-1 shadow-2xl backdrop-blur-md"
     >
-      <div className="relative flex rounded-lg bg-secondary p-0.5">
+      <div className="relative flex shrink-0 rounded-lg bg-secondary p-0.5">
         {views.map((v) => (
-          <button key={v} onClick={() => setStudio({ view: v })} className="label-mono relative px-3 py-1.5 !text-[10px]">
-            {view === v && <motion.span layoutId="view-pill" transition={{ duration: 0.35, ease }} className="absolute inset-0 rounded-md bg-foreground" />}
+          <button key={v} onClick={() => setStudio({ view: v })} className="label-mono relative px-2.5 py-1.5 !text-[10px]">
+            {view === v && <motion.span layoutId="view-pill" transition={{ duration: 0.3, ease }} className="absolute inset-0 rounded-md bg-foreground" />}
             <span className={cn('relative', view === v ? 'text-background' : 'text-muted-foreground')}>{v}</span>
           </button>
         ))}
       </div>
-      <div className="mx-1 h-5 w-px bg-border" />
-      <Tip label="Showcase tour (T)">
-        <Button size="sm" variant={touring ? 'default' : 'ghost'} onClick={() => setStudio((s) => ({ touring: !s.touring }))}>
-          {touring ? <Pause className="size-3.5" /> : <Play className="size-3.5" />} Tour
-        </Button>
-      </Tip>
+      <div className="mx-0.5 h-5 w-px shrink-0 bg-border" />
       <Tip label="Explode assembly (E)">
-        <Button size="sm" variant={exploded ? 'default' : 'ghost'} onClick={() => setStudio((s) => ({ exploded: !s.exploded, touring: false }))}>
-          <Expand className="size-3.5" /> Explode
+        <Button size="sm" variant={exploded ? 'default' : 'ghost'} aria-label="Explode assembly" onClick={() => setStudio((s) => ({ exploded: !s.exploded, touring: false }))}>
+          <Expand className="size-3.5" /> <span className="hidden xl:inline">Explode</span>
         </Button>
       </Tip>
-      <Tip label={scale === 'system' ? 'Fit system (F)' : 'Fit board (F)'}>
-        <Button size="sm" variant="ghost" onClick={requestFit}><Maximize className="size-3.5" /> Fit</Button>
-      </Tip>
-      <div className="mx-1 h-5 w-px bg-border" />
-      <Tip label={scale === 'system' ? 'Zoom out to system / into board' : 'Back to system'}>
-        <Button size="sm" variant="ghost" onClick={() => goScale(scale === 'system' ? 'board' : 'system')}>
-          <Boxes className="size-3.5" /> {scale === 'system' ? 'Board' : 'System'}
+      <Tip label="Fit entire model (F)">
+        <Button size="sm" variant="ghost" aria-label="Fit entire model" onClick={requestFit}>
+          <Maximize className="size-3.5" /> <span className="hidden xl:inline">Fit</span>
         </Button>
       </Tip>
-      <div className="mx-1 h-5 w-px bg-border" />
-      <Tip label="Copper traces">
-        <Button size="icon-sm" variant={showTraces ? 'secondary' : 'ghost'} onClick={() => setStudio((s) => ({ showTraces: !s.showTraces }))}>
-          <Layers className="size-3.5" />
+      <Tip label="Showcase tour (T)">
+        <Button size="sm" variant={touring ? 'default' : 'ghost'} aria-label="Showcase tour" onClick={() => setStudio((s) => ({ touring: !s.touring }))}>
+          {touring ? <Pause className="size-3.5" /> : <Play className="size-3.5" />} <span className="hidden xl:inline">Tour</span>
         </Button>
       </Tip>
-      <Tip label="Callouts">
-        <Button size="icon-sm" variant={showCallouts ? 'secondary' : 'ghost'} onClick={() => setStudio((s) => ({ showCallouts: !s.showCallouts }))}>
-          <Tag className="size-3.5" />
+      <div className="mx-0.5 h-5 w-px shrink-0 bg-border" />
+      <Tip label={`Component labels: ${labelCaption} (click to cycle)`}>
+        <Button size="sm" variant={labelMode === 'all' ? 'secondary' : 'ghost'} aria-label={`Component labels: ${labelCaption}`} onClick={cycleLabelMode}>
+          <Tag className="size-3.5" /> <span className="hidden md:inline">{labelCaption}</span>
         </Button>
       </Tip>
+      {scale === 'system' ? (
+        <Tip label={showAllWires ? 'Showing all bus wires' : 'Showing focused wires only'}>
+          <Button size="sm" variant={showAllWires ? 'secondary' : 'ghost'} aria-label="Toggle all wiring" onClick={() => setStudio((s) => ({ showAllWires: !s.showAllWires }))}>
+            <Cable className="size-3.5" /> <span className="hidden lg:inline">Wiring</span>
+          </Button>
+        </Tip>
+      ) : (
+        <Tip label="Toggle copper traces">
+          <Button size="sm" variant={showTraces ? 'secondary' : 'ghost'} aria-label="Toggle copper traces" onClick={() => setStudio((s) => ({ showTraces: !s.showTraces }))}>
+            <Layers className="size-3.5" /> <span className="hidden lg:inline">Traces</span>
+          </Button>
+        </Tip>
+      )}
     </motion.div>
   )
 }
 
-function Prompt() {
+function ChangeToast() {
+  const change = useStudio((s) => s.lastChange)
+  const historyLen = useStudio((s) => s.history.length)
+  if (!change) return null
+  return (
+    <motion.div
+      key={change.id}
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 8 }}
+      transition={{ duration: 0.2, ease }}
+      className={cn(
+        'absolute bottom-16 left-1/2 z-20 flex max-w-[min(560px,calc(100%-32px))] -translate-x-1/2 items-center gap-2 rounded-lg border px-3 py-1.5 text-xs shadow-xl backdrop-blur-md',
+        change.tone === 'warn'
+          ? 'border-amber-400/35 bg-amber-950/85 text-amber-100'
+          : change.tone === 'ok'
+          ? 'border-emerald-400/35 bg-emerald-950/85 text-emerald-100'
+          : 'border-border bg-background/90 text-foreground',
+      )}
+      role="status"
+      aria-live="polite"
+    >
+      <span className="truncate">{change.summary}</span>
+      {historyLen > 0 && (
+        <button onClick={undoLastEdit} className="shrink-0 font-mono text-[11px] underline hover:opacity-80">
+          Undo
+        </button>
+      )}
+      <button onClick={() => setStudio({ lastChange: null })} className="ml-1 shrink-0 opacity-70 hover:opacity-100" aria-label="Dismiss message">
+        <X className="size-3.5" />
+      </button>
+    </motion.div>
+  )
+}
+
+function CopilotBar() {
+  const scale = useStudio((s) => s.scale)
+  const sys = useStudio((s) => s.system)
+  const board = useStudio((s) => s.board)
+  const deviceId = useStudio((s) => s.device)
+  const selectedPartRef = useStudio((s) => s.selected)
+  const v = useStudio((s) => s.verification)
+  const leftOpen = useStudio((s) => s.leftPanelOpen)
+  const pending = useStudio((s) => s.pendingPrompt)
+
+  const [promptOpen, setPromptOpen] = useState(false)
+  const [explainText, setExplainText] = useState<string | null>(null)
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
   const [log, setLog] = useState<GenLog[]>([])
   const [error, setError] = useState<string | null>(null)
-  const pending = useStudio((s) => s.pendingPrompt)
+
+  const selectedDev = useMemo(() => sys.devices.find((d) => d.id === deviceId), [sys.devices, deviceId])
+  const selectedCheck = useMemo(() => (selectedDev ? analyzeDevice(selectedDev, board) : null), [selectedDev, board])
+  const health = useMemo(() => analyzeSystem(sys, board), [sys, board])
+
   useEffect(() => {
-    if (!pending || busy) return
-    setStudio({ pendingPrompt: null })
-    setText(pending)
-    run(pending)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pending])
-  const run = async (override?: string) => {
-    const text_ = override ?? text
-    if (!text_.trim() || busy) return
-    setBusy(true); setError(null); setLog([])
+    setExplainText(null)
+  }, [deviceId, selectedPartRef, scale])
+
+  const runGenerate = async (override?: string) => {
+    const promptStr = (override ?? text).trim()
+    if (!promptStr || busy) return
+    setPromptOpen(true)
+    setBusy(true)
+    setError(null)
+    setLog([])
     try {
       const loader = aiModules['./ai/generate.ts']
-      if (!loader) throw new Error('Generation service not installed')
+      if (!loader) throw new Error('AI generation service unavailable')
       const mod = (await loader()) as { generateBoard: (p: string, on: (e: { type: string; stage?: string; message?: string }) => void) => Promise<Board> }
-      const board = await mod.generateBoard(text_, (e) => {
-        if (e.type === 'stage') setLog((l) => [...l.slice(-5), { stage: e.stage ?? '', message: e.message ?? '' }])
+      const prev = getStudio().board
+      const prevVer = getStudio().verification
+      const prevSys = getStudio().system
+      const nextBoard = await mod.generateBoard(promptStr, (e) => {
+        if (e.type === 'stage') setLog((l) => [...l.slice(-4), { stage: e.stage ?? '', message: e.message ?? '' }])
       })
-      setStudio({ board, selected: null, exploded: false, touring: true, verification: { status: 'idle', theorems: [] } })
+      setStudio((s) => ({
+        history: [
+          ...s.history.slice(-19),
+          {
+            system: JSON.parse(JSON.stringify(prevSys)),
+            board: JSON.parse(JSON.stringify(prev)),
+            verification: prevVer,
+            budgetUsd: s.budgetUsd,
+            selectedOfferByMpn: { ...s.selectedOfferByMpn },
+            label: `Generated "${nextBoard.name}"`,
+          },
+        ],
+        scale: 'board',
+        board: nextBoard,
+        selected: null,
+        exploded: false,
+        touring: false,
+        verification: { status: 'idle', theorems: [] },
+        lastChange: {
+          id: Date.now(),
+          summary: `Generated "${nextBoard.name}" (${nextBoard.parts.length} parts, ${nextBoard.nets.length} nets)`,
+          tone: 'ok',
+        },
+      }))
+      setPromptOpen(false)
       requestFit()
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -283,51 +654,237 @@ function Prompt() {
       setBusy(false)
     }
   }
+
+  useEffect(() => {
+    if (!pending || busy) return
+    setStudio({ pendingPrompt: null })
+    setText(pending)
+    runGenerate(pending)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending])
+
+  // Real contextual engineering actions
+  const handleExplainSelected = () => {
+    if (scale === 'system' && selectedDev) {
+      const item = byId[selectedDev.catalogId]
+      const chk = analyzeDevice(selectedDev, board)
+      setExplainText(
+        `${selectedDev.label} (${item.name}): ${item.description} Powered via ${selectedDev.port} (${selectedDev.rail} V rail). Status: ${chk.headline}.`,
+      )
+      return
+    }
+    if (scale === 'board' && selectedPartRef) {
+      const part = board.parts.find((p) => p.ref === selectedPartRef)
+      if (part) {
+        setExplainText(`${part.name} (${part.ref}, ${part.mpn}): ${part.description}`)
+      }
+    }
+  }
+
+  const handleFindCheaper = () => {
+    if (scale === 'system' && selectedDev) {
+      const alts = alternativesFor(selectedDev, board).filter((a) => !a.current)
+      const cheaper = alts.filter((a) => a.delta < 0).sort((a, b) => a.price - b.price)[0]
+      if (cheaper) {
+        commitSystemSwap(selectedDev.id, cheaper.item.id)
+      } else {
+        setExplainText(
+          `${byId[selectedDev.catalogId].name} (${usd(unitPrice(byId[selectedDev.catalogId]))}) is already the lowest-cost option in this catalog. Use "Buy parts" to check live merchant offers.`,
+        )
+      }
+      return
+    }
+    // Whole-system cost check
+    let savings = 0
+    let bestSwap: { devId: string; catId: string; name: string; save: number } | null = null
+    for (const d of sys.devices) {
+      const alts = alternativesFor(d, board).filter((a) => !a.current && a.delta < 0 && a.severity !== 'warning')
+      if (alts.length) {
+        const pick = alts.sort((a, b) => a.delta - b.delta)[0]
+        savings += -pick.delta
+        if (!bestSwap || -pick.delta > bestSwap.save) {
+          bestSwap = { devId: d.id, catId: pick.item.id, name: pick.item.name, save: -pick.delta }
+        }
+      }
+    }
+    if (bestSwap) {
+      setStudio({ device: bestSwap.devId, systemTab: 'inspect' })
+      setExplainText(`Found up to ${usd(savings)} in compatible catalog savings — starting with ${bestSwap.name} (−${usd(bestSwap.save)}).`)
+    } else {
+      setStudio({ systemTab: 'bom' })
+      setExplainText('Current parts are already the lowest-cost compatible options in the catalog. Check live sellers in Parts & cost.')
+    }
+  }
+
+  const handleBestSwap = () => {
+    if (!selectedDev) return
+    const targetId =
+      selectedCheck?.suggestedCatalogId ??
+      alternativesFor(selectedDev, board).find((a) => !a.current && a.severity !== 'warning')?.item.id
+    if (targetId) {
+      const sameCount = sys.devices.filter((d) => d.bus === selectedDev.bus && d.catalogId === selectedDev.catalogId).length
+      commitSystemSwap(selectedDev.id, targetId, { applyToMatching: sameCount > 1 })
+    } else {
+      setExplainText('No higher-compatibility drop-in replacement is in the current catalog. Review power wiring in Board view.')
+    }
+  }
+
   return (
-    <motion.div
-      initial={{ opacity: 0, y: -12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: 0.45, duration: 0.6, ease }}
-      className="absolute left-1/2 top-4 z-10 w-[min(560px,calc(100%-32px))] -translate-x-1/2"
-    >
-      <form
-        onSubmit={(e) => { e.preventDefault(); run() }}
-        className="flex items-center gap-2 rounded-xl border border-border bg-background/80 p-1.5 pl-3 shadow-2xl backdrop-blur-md"
-      >
-        <Sparkles className="size-4 shrink-0 text-muted-foreground" />
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Describe a board: “ESP32 weather station with BME280 and OLED”"
-          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
-        />
-        <Button size="sm" type="submit" disabled={busy || !text.trim()}>
-          {busy ? <Loader2 className="size-3.5 animate-spin" /> : 'Generate'}
-        </Button>
-      </form>
-      <AnimatePresence>
-        {(busy || error) && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.3, ease }}
-            className="mt-2 overflow-hidden rounded-lg border border-border bg-background/85 backdrop-blur-md"
+    <div className="pointer-events-none absolute left-3 right-3 top-3 z-10 flex flex-col items-start gap-2">
+      <div className="pointer-events-auto flex flex-wrap items-center gap-1.5">
+        {!leftOpen && (
+          <Tip label="Show component list">
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-8 bg-background/85 backdrop-blur-md"
+              onClick={() => setStudio({ leftPanelOpen: true })}
+              aria-label="Show component list"
+            >
+              <PanelLeftOpen className="size-3.5" /> Components
+            </Button>
+          </Tip>
+        )}
+
+        <div className="flex flex-wrap items-center gap-1 rounded-xl border border-border bg-background/80 p-1 shadow-lg backdrop-blur-md">
+          <Button
+            size="sm"
+            variant={promptOpen ? 'default' : 'ghost'}
+            className="h-7 px-2.5 text-xs"
+            onClick={() => setPromptOpen((o) => !o)}
           >
-            <div className="space-y-1 p-2.5 font-mono text-[11px]">
-              {log.map((l, i) => (
-                <motion.div key={i} initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }} className="flex gap-2">
-                  <span className="w-12 uppercase text-muted-foreground">{l.stage}</span>
-                  <span className="truncate">{l.message}</span>
-                </motion.div>
-              ))}
-              {busy && !log.length && <div className="text-muted-foreground">Contacting Gemini…</div>}
-              {error && <div className="text-red-300">{error}</div>}
-            </div>
+            <Sparkles className="size-3.5" />
+            {promptOpen ? 'Close AI' : 'Modify with AI'}
+          </Button>
+
+          <div className="mx-0.5 h-4 w-px bg-border" />
+
+          {scale === 'system' && selectedDev ? (
+            <>
+              {selectedCheck?.severity === 'warning' && (
+                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs text-amber-200 hover:text-amber-100" onClick={handleBestSwap}>
+                  <Wrench className="size-3" /> Fix power warning
+                </Button>
+              )}
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={handleFindCheaper}>
+                Lower cost
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={handleExplainSelected}>
+                Explain part
+              </Button>
+            </>
+          ) : scale === 'system' ? (
+            <>
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={() => setStudio({ checksOpen: true })}>
+                Check compatibility {health.warningCount > 0 ? `(${health.warningCount})` : ''}
+              </Button>
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={handleFindCheaper}>
+                Reduce cost
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={runBoardDesignChecks} disabled={v.status === 'running'}>
+                {v.status === 'running' ? <Loader2 className="size-3 animate-spin" /> : 'Check design'}
+              </Button>
+              {v.status === 'failed' && v.theorems.some((t) => !t.ok) && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 px-2 text-xs text-amber-200"
+                  onClick={async () => {
+                    try {
+                      await runAiBoardRepair()
+                    } catch (e) {
+                      setError(e instanceof Error ? e.message : String(e))
+                      setPromptOpen(true)
+                    }
+                  }}
+                >
+                  <Wrench className="size-3" /> Fix with AI
+                </Button>
+              )}
+              {selectedPartRef && (
+                <Button size="sm" variant="ghost" className="h-7 px-2 text-xs" onClick={handleExplainSelected}>
+                  Explain part
+                </Button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
+      <AnimatePresence>
+        {explainText && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            className="pointer-events-auto flex max-w-md items-start gap-2 rounded-lg border border-border bg-background/92 px-3 py-2 text-xs shadow-xl backdrop-blur-md"
+          >
+            <p className="leading-relaxed text-foreground">{explainText}</p>
+            <button onClick={() => setExplainText(null)} className="shrink-0 text-muted-foreground hover:text-foreground" aria-label="Close explanation">
+              <X className="size-3.5" />
+            </button>
           </motion.div>
         )}
       </AnimatePresence>
-    </motion.div>
+
+      <AnimatePresence>
+        {(promptOpen || busy || error) && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.2, ease }}
+            className="pointer-events-auto w-[min(520px,100%)]"
+          >
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                runGenerate()
+              }}
+              className="flex items-center gap-2 rounded-xl border border-border bg-background/92 p-1.5 pl-3 shadow-2xl backdrop-blur-md"
+            >
+              <Sparkles className="size-4 shrink-0 text-muted-foreground" />
+              <input
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Describe a custom board or change (e.g. “ESP32 EMG gesture wristband with BLE”)"
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                autoFocus
+              />
+              <Button size="sm" type="submit" disabled={busy || !text.trim()}>
+                {busy ? <Loader2 className="size-3.5 animate-spin" /> : 'Generate'}
+              </Button>
+            </form>
+            {(busy || error) && (
+              <div className="mt-1.5 rounded-lg border border-border bg-background/92 p-2.5 text-xs backdrop-blur-md">
+                {busy && (
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" />
+                    <span>{log[log.length - 1]?.message || 'Generating circuit and PCB layout with Gemini…'}</span>
+                  </div>
+                )}
+                {log.length > 0 && (
+                  <details className="mt-1.5 text-[11px] text-muted-foreground">
+                    <summary className="cursor-pointer font-mono hover:text-foreground">Activity ({log.length})</summary>
+                    <div className="mt-1 space-y-0.5 font-mono text-[10.5px]">
+                      {log.map((l, i) => (
+                        <div key={i} className="truncate">
+                          <span className="uppercase">{l.stage}:</span> {l.message}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                )}
+                {error && <div className="mt-1 text-red-300">{error}</div>}
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   )
 }
 
@@ -341,7 +898,7 @@ function PartEditor({ part }: { part: Part }) {
     commitBoardEdit((draft) => {
       const target = draft.parts.find((p) => p.ref === part.ref)
       if (target) target[axis] = +val.toFixed(2)
-    }, `Moved ${part.ref} ${axis.toUpperCase()} → ${val.toFixed(1)} mm`)
+    }, `Moved ${part.name} (${part.ref})`)
   }
 
   const rotatePart = () => {
@@ -349,7 +906,7 @@ function PartEditor({ part }: { part: Part }) {
     commitBoardEdit((draft) => {
       const target = draft.parts.find((p) => p.ref === part.ref)
       if (target) target.rot = nextRot
-    }, `Rotated ${part.ref} → ${nextRot}°`)
+    }, `Rotated ${part.name} to ${nextRot}°`)
   }
 
   const runPartShop = async () => {
@@ -364,7 +921,7 @@ function PartEditor({ part }: { part: Part }) {
   return (
     <div className="mt-4 space-y-3 border-t border-border pt-3">
       <div className="flex items-center justify-between">
-        <span className="label-mono">Placement Edit</span>
+        <span className="label-mono">Position</span>
         <Button size="sm" variant="ghost" onClick={rotatePart} className="h-6 px-2 text-[11px]">
           <RotateCw className="size-3" /> {part.rot}°
         </Button>
@@ -381,7 +938,9 @@ function PartEditor({ part }: { part: Part }) {
               const v = Number(e.target.value)
               if (Number.isFinite(v) && v !== part.x) moveAxis('x', v)
             }}
-            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            }}
             className="mt-1 h-7 font-mono text-xs"
           />
         </label>
@@ -396,17 +955,19 @@ function PartEditor({ part }: { part: Part }) {
               const v = Number(e.target.value)
               if (Number.isFinite(v) && v !== part.y) moveAxis('y', v)
             }}
-            onKeyDown={(e) => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
+            }}
             className="mt-1 h-7 font-mono text-xs"
           />
         </label>
       </div>
 
       <div className="flex items-center justify-between pt-1">
-        <span className="label-mono">Live Procurement</span>
+        <span className="label-mono">Buy parts</span>
         <Button size="sm" variant="secondary" onClick={runPartShop} disabled={searching} className="h-6 px-2 text-[11px]">
           {searching ? <Loader2 className="size-3 animate-spin" /> : <ShoppingBag className="size-3" />}
-          Shop.dev
+          Find sellers
         </Button>
       </div>
 
@@ -414,7 +975,7 @@ function PartEditor({ part }: { part: Part }) {
         <div className="space-y-1.5 text-xs">
           {shopEntry.status === 'no_results' && (
             <div className="rounded border border-dashed border-border p-2 text-[11px] text-muted-foreground">
-              No verified Shopify listings for {part.mpn}; using catalog reference price.
+              No live listings found for {part.mpn}; using reference pricing.
             </div>
           )}
           {shopEntry.status === 'error' && <div className="text-[11px] text-red-300">{shopEntry.error}</div>}
@@ -427,7 +988,7 @@ function PartEditor({ part }: { part: Part }) {
                   <span className="shrink-0 font-mono text-[11.5px]">{o.formattedPrice}</span>
                 </div>
                 <div className="mt-0.5 text-[10.5px] text-muted-foreground">
-                  {o.sellerName} · {o.available ? 'In stock' : 'Out of stock'} · {o.matchKind.replaceAll('_', ' ')}
+                  {o.sellerName} · {o.available ? 'In stock' : 'Out of stock'}
                 </div>
                 <div className="mt-1.5 flex items-center gap-1.5">
                   {o.matchKind === 'exact_match' && o.available && o.currency === 'USD' && (
@@ -440,15 +1001,10 @@ function PartEditor({ part }: { part: Part }) {
                           selectedOfferByMpn: active
                             ? Object.fromEntries(Object.entries(s.selectedOfferByMpn).filter(([k]) => k !== part.mpn))
                             : { ...s.selectedOfferByMpn, [part.mpn]: o },
-                          lastDiff: [
-                            active
-                              ? `Reverted ${part.mpn} to catalog quote`
-                              : `Selected ${o.sellerName} (${o.formattedPrice}) for ${part.mpn}`,
-                          ],
                         }))
                       }
                     >
-                      {active ? 'Selected' : 'Use Offer'}
+                      {active ? 'Using price' : 'Use price'}
                     </Button>
                   )}
                   <a
@@ -457,7 +1013,7 @@ function PartEditor({ part }: { part: Part }) {
                     rel="noopener noreferrer"
                     className="inline-flex h-6 items-center gap-1 rounded border border-border px-2 font-mono text-[10px] text-muted-foreground hover:text-foreground"
                   >
-                    Store <ExternalLink className="size-2.5" />
+                    Open store <ExternalLink className="size-2.5" />
                   </a>
                 </div>
               </div>
@@ -474,7 +1030,6 @@ function BomAndShopPanel() {
   const budgetUsd = useStudio((s) => s.budgetUsd)
   const shopByMpn = useStudio((s) => s.shopByMpn)
   const selectedOfferByMpn = useStudio((s) => s.selectedOfferByMpn)
-  const lastDiff = useStudio((s) => s.lastDiff)
   const [searchingAll, setSearchingAll] = useState(false)
 
   const lines = useMemo(() => {
@@ -517,12 +1072,12 @@ function BomAndShopPanel() {
     <div className="space-y-3 p-4">
       <div className="flex items-center justify-between">
         <div>
-          <div className="label-mono">Known Hardware BOM</div>
+          <div className="label-mono">Board parts cost</div>
           <div className="mt-0.5 font-mono text-xl font-medium tabular">${totalUsd.toFixed(2)}</div>
         </div>
         <Button size="sm" variant="secondary" onClick={searchMajorParts} disabled={searchingAll}>
           {searchingAll ? <Loader2 className="size-3.5 animate-spin" /> : <ShoppingBag className="size-3.5" />}
-          Shop.dev
+          Buy parts
         </Button>
       </div>
 
@@ -539,7 +1094,6 @@ function BomAndShopPanel() {
             const num = Number(raw)
             setStudio({
               budgetUsd: raw === '' ? null : Number.isFinite(num) && num >= 0 ? num : budgetUsd,
-              lastDiff: [raw === '' ? 'Cleared budget cap — BOM unchanged' : `Budget cap $${num.toFixed(2)} — BOM unchanged`],
             })
           }}
           className="h-7 font-mono text-xs"
@@ -547,17 +1101,16 @@ function BomAndShopPanel() {
       </div>
 
       {budgetUsd != null && (
-        <div className={cn('rounded-md border px-2.5 py-1.5 font-mono text-[11px]', totalUsd > budgetUsd ? 'border-red-400/40 text-red-300' : 'border-border text-muted-foreground')}>
+        <div
+          className={cn(
+            'rounded-md border px-2.5 py-1.5 font-mono text-[11px]',
+            totalUsd > budgetUsd ? 'border-amber-400/40 bg-amber-500/10 text-amber-200' : 'border-border text-muted-foreground',
+          )}
+        >
           {totalUsd > budgetUsd
-            ? `Exceeded cap by $${(totalUsd - budgetUsd).toFixed(2)}`
+            ? `Over budget by $${(totalUsd - budgetUsd).toFixed(2)}`
             : `$${(budgetUsd - totalUsd).toFixed(2)} remaining under $${budgetUsd.toFixed(2)}`}
           {unpricedCount > 0 ? ` · ${unpricedCount} unpriced` : ''}
-        </div>
-      )}
-
-      {lastDiff.length > 0 && (
-        <div className="rounded-md border border-border bg-muted/40 p-2 font-mono text-[10.5px] text-muted-foreground">
-          {lastDiff.join(' · ')}
         </div>
       )}
 
@@ -582,7 +1135,7 @@ function BomAndShopPanel() {
               </div>
               <div className="mt-0.5 flex items-center justify-between font-mono text-[10px] text-muted-foreground">
                 <span className="truncate">{part.mpn} ×{refs.length}</span>
-                <span>{offer ? `Shop: ${offer.sellerName}` : catUnit != null ? `$${catUnit.toFixed(3)}/ea ref` : 'no quote'}</span>
+                <span>{offer ? offer.sellerName : catUnit != null ? `$${catUnit.toFixed(3)}/ea ref` : 'no quote'}</span>
               </div>
               {bestExactUsd && !offer && (
                 <div className="mt-1.5 flex items-center justify-between border-t border-border/60 pt-1 text-[10.5px]">
@@ -593,12 +1146,11 @@ function BomAndShopPanel() {
                     onClick={() =>
                       setStudio((s) => ({
                         selectedOfferByMpn: { ...s.selectedOfferByMpn, [part.mpn]: bestExactUsd },
-                        lastDiff: [`Applied ${bestExactUsd.sellerName} offer (${bestExactUsd.formattedPrice}) to ${part.mpn}`],
                       }))
                     }
                     className="ml-2 shrink-0 rounded border border-border px-1.5 py-0.5 font-mono text-[10px] hover:bg-accent"
                   >
-                    Apply
+                    Use
                   </button>
                 </div>
               )}
@@ -608,7 +1160,7 @@ function BomAndShopPanel() {
       </div>
 
       <p className="text-[10.5px] leading-relaxed text-muted-foreground">
-        Component BOM only. Excludes bare PCB fabrication, assembly, shipping, and tax.
+        Component BOM only (live offers powered by Shop.dev). Excludes bare PCB fabrication, assembly, shipping, and tax.
       </p>
     </div>
   )
@@ -618,7 +1170,6 @@ function Inspector() {
   const board = useStudio((s) => s.board)
   const selected = useStudio((s) => s.selected)
   const tab = useStudio((s) => s.inspectorTab)
-  const lastDiff = useStudio((s) => s.lastDiff)
   const part = board.parts.find((p) => p.ref === selected)
   const stats = useBoardStats(board)
   const nets = useMemo(
@@ -626,7 +1177,7 @@ function Inspector() {
     [board, part],
   )
   return (
-    <aside className="flex w-80 shrink-0 flex-col border-l border-border max-md:hidden">
+    <aside className="flex w-80 shrink-0 flex-col border-l border-border max-md:hidden" aria-label="Board inspector">
       <Tabs
         value={tab}
         onValueChange={(v) => setStudio({ inspectorTab: v as 'inspect' | 'bom' })}
@@ -634,8 +1185,8 @@ function Inspector() {
       >
         <div className="border-b border-border px-3 py-2">
           <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="inspect">{part ? `Part ${part.ref}` : 'Board'}</TabsTrigger>
-            <TabsTrigger value="bom">BOM &amp; Shop</TabsTrigger>
+            <TabsTrigger value="inspect">{part ? part.name.split(' ')[0] : 'Board'}</TabsTrigger>
+            <TabsTrigger value="bom">Parts &amp; cost</TabsTrigger>
           </TabsList>
         </div>
 
@@ -644,84 +1195,81 @@ function Inspector() {
             {part ? (
               <motion.div
                 key={part.ref}
-                initial={{ opacity: 0, y: 8 }}
+                initial={{ opacity: 0, y: 6 }}
                 animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -6 }}
-                transition={{ duration: 0.28, ease }}
+                exit={{ opacity: 0, y: -4 }}
+                transition={{ duration: 0.22, ease }}
                 className="p-4"
               >
-                <div className="flex items-start justify-between">
+                <div className="flex items-start justify-between gap-2">
                   <div>
-                    <div className="label-mono">Designator</div>
-                    <div className="mt-1 font-mono text-3xl font-medium tracking-tight">{part.ref}</div>
+                    <div className="label-mono">{part.category} · {part.ref}</div>
+                    <h2 className="mt-1 text-base font-semibold tracking-tight">{part.name}</h2>
+                    <div className="mt-0.5 text-xs text-muted-foreground">{part.manufacturer} · {part.mpn}</div>
                   </div>
-                  <Button size="icon-sm" variant="ghost" onClick={() => setStudio({ selected: null })}><X className="size-3.5" /></Button>
+                  <Button size="icon-sm" variant="ghost" onClick={() => setStudio({ selected: null })} aria-label="Deselect part">
+                    <X className="size-3.5" />
+                  </Button>
                 </div>
-                <div className="mt-3 text-sm font-medium">{part.name}</div>
-                <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{part.description}</p>
-                <dl className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border text-xs">
+
+                <p className="mt-2.5 text-xs leading-relaxed text-muted-foreground">{part.description}</p>
+
+                <dl className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border text-xs">
                   {[
-                    ['MPN', part.mpn], ['Maker', part.manufacturer], ['Package', part.pkg], ['Value', part.value ?? '—'],
-                    ['Position', `${part.x.toFixed(1)}, ${part.y.toFixed(1)} mm`], ['Rotation', `${part.rot}°`],
+                    ['Package', part.pkg],
+                    ['Unit price', part.pricing?.[0] ? usd(part.pricing[0].price) : 'Unpriced'],
+                    ['Position', `${part.x.toFixed(1)}, ${part.y.toFixed(1)} mm`],
+                    ['Rotation', `${part.rot}°`],
                   ].map(([k, v]) => (
-                    <div key={k} className="bg-background p-2.5">
-                      <dt className="label-mono !text-[9.5px]">{k}</dt>
-                      <dd className="mt-1 truncate font-mono text-[11.5px]">{v}</dd>
+                    <div key={k} className="bg-card p-2">
+                      <dt className="label-mono !text-[9px]">{k}</dt>
+                      <dd className="mt-0.5 truncate font-mono text-[11.5px]">{v}</dd>
                     </div>
                   ))}
                 </dl>
-                {part.pricing && (
-                  <>
-                    <div className="label-mono mt-5">Pricing</div>
-                    <table className="mt-2 w-full text-xs tabular">
-                      <tbody>
-                        {part.pricing.map((b) => (
-                          <tr key={b.qty} className="border-b border-border/60 last:border-0">
-                            <td className="py-1.5 text-muted-foreground">{b.qty}+</td>
-                            <td className="py-1.5 text-right font-mono">${b.price.toFixed(3)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </>
-                )}
-                <div className="label-mono mt-5">Nets · {nets.length}</div>
-                <div className="mt-2 flex flex-wrap gap-1">
-                  {nets.map((n, i) => (
-                    <button
-                      key={n.name + i}
-                      onMouseEnter={() => setStudio({ hoveredNet: n.name })}
-                      onMouseLeave={() => setStudio({ hoveredNet: null })}
-                      className="rounded border border-border px-1.5 py-0.5 font-mono text-[10.5px] text-muted-foreground transition-colors hover:border-foreground/40 hover:text-foreground"
-                    >
-                      {n.name}
-                    </button>
-                  ))}
-                </div>
+
                 <PartEditor part={part} />
+
+                <details className="mt-4 border-t border-border pt-3 text-xs">
+                  <summary className="cursor-pointer font-mono text-[11px] text-muted-foreground hover:text-foreground">
+                    Technical details ({nets.length} connected nets)
+                  </summary>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {nets.map((n, i) => (
+                      <button
+                        key={n.name + i}
+                        onMouseEnter={() => setStudio({ hoveredNet: n.name })}
+                        onMouseLeave={() => setStudio({ hoveredNet: null })}
+                        className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground hover:border-foreground/40 hover:text-foreground"
+                      >
+                        {n.name}
+                      </button>
+                    ))}
+                  </div>
+                </details>
               </motion.div>
             ) : (
               <motion.div key="board" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="p-4">
-                <div className="label-mono">Board</div>
-                <div className="mt-1 text-lg font-medium tracking-tight">{board.name}</div>
-                <div className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border text-xs">
+                <div className="label-mono">Circuit Board</div>
+                <div className="mt-1 text-base font-semibold tracking-tight">{board.name}</div>
+                <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-border bg-border text-xs">
                   {[
-                    ['Size', `${board.width} × ${board.height} mm`], ['Thickness', `${board.thickness} mm`],
-                    ['Parts', board.parts.length], ['Nets', board.nets.length],
-                    ['Traces', `${stats.traces} · ${(stats.length / 10).toFixed(1)} cm`], ['Vias', stats.vias],
+                    ['Size', `${board.width} × ${board.height} mm`],
+                    ['Thickness', `${board.thickness} mm`],
+                    ['Components', String(board.parts.length)],
+                    ['Connections', `${board.nets.length} nets`],
+                    ['Copper length', `${(stats.length / 10).toFixed(1)} cm`],
+                    ['Est. parts', usd(stats.cost)],
                   ].map(([k, v]) => (
-                    <div key={k as string} className="bg-background p-2.5">
-                      <div className="label-mono !text-[9.5px]">{k}</div>
-                      <div className="mt-1 font-mono text-[11.5px]">{v}</div>
+                    <div key={k} className="bg-card p-2">
+                      <div className="label-mono !text-[9px]">{k}</div>
+                      <div className="mt-0.5 font-mono text-[11.5px]">{v}</div>
                     </div>
                   ))}
                 </div>
-                {lastDiff.length > 0 && (
-                  <div className="mt-3 rounded-md border border-border bg-muted/40 p-2 font-mono text-[10.5px] text-muted-foreground">
-                    {lastDiff.join(' · ')}
-                  </div>
-                )}
-                <p className="mt-3 text-xs text-muted-foreground">Select a part on the board or in the library.</p>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Click any component on the board to adjust placement, inspect connections, or check live pricing.
+                </p>
               </motion.div>
             )}
           </AnimatePresence>
@@ -731,59 +1279,28 @@ function Inspector() {
           <BomAndShopPanel />
         </TabsContent>
       </Tabs>
-      <Verification />
+      <DesignChecksCard />
     </aside>
   )
 }
 
-function Verification() {
+function DesignChecksCard() {
   const v = useStudio((s) => s.verification)
   const [repairing, setRepairing] = useState(false)
   const [repairNote, setRepairNote] = useState<string | null>(null)
 
-  const run = async () => {
+  const handleCheck = async () => {
     setRepairNote(null)
-    setStudio({ verification: { status: 'running', theorems: [] } })
-    try {
-      const loader = verifyModules['./verify/verify.ts']
-      if (!loader) throw new Error('Lean verifier not installed')
-      const mod = (await loader()) as { verifyBoard: (b: Board) => Promise<VerificationData> }
-      setStudio({ verification: await mod.verifyBoard(getStudio().board) })
-    } catch (e) {
-      setStudio({ verification: { status: 'failed', theorems: [], log: e instanceof Error ? e.message : String(e) } })
-    }
+    await runBoardDesignChecks()
   }
 
-  const runRepair = async () => {
+  const handleRepair = async () => {
     if (repairing) return
     setRepairing(true)
     setRepairNote(null)
     try {
-      const current = getStudio().board
-      const prevVer = getStudio().verification
-      const res = await fetch('/api/repair', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ board: current }),
-      })
-      const data = (await res.json()) as {
-        repaired?: boolean
-        rationale?: string
-        board?: Board
-        verification?: VerificationData
-        error?: string
-      }
-      if (!res.ok || data.error || !data.board || !data.verification) {
-        throw new Error(data.error ?? `Repair HTTP ${res.status}`)
-      }
-      setStudio((s) => ({
-        history: [...s.history.slice(-19), { board: current, verification: prevVer, label: 'Auto-repair DRC & Lean' }],
-        board: data.board!,
-        verification: data.verification!,
-        lastDiff: [`Repaired → Rev ${data.board!.revision}`, data.repaired ? '15/15 Lean 4 theorems ✓' : 'Partial repair'],
-        touring: false,
-      }))
-      setRepairNote(data.rationale ?? 'Repaired failed constraints and re-verified in Lean 4.')
+      const res = await runAiBoardRepair()
+      setRepairNote(res.rationale)
     } catch (e) {
       setRepairNote(e instanceof Error ? e.message : String(e))
     } finally {
@@ -792,68 +1309,65 @@ function Verification() {
   }
 
   const passed = v.theorems.filter((t) => t.ok).length
-  const hasFailed = v.status === 'failed' && v.theorems.some((t) => !t.ok)
+  const failed = v.theorems.filter((t) => !t.ok)
 
   return (
     <div className="border-t border-border p-4">
       <div className="flex items-center justify-between gap-1.5">
         <div className="flex items-center gap-2">
-          <ShieldCheck className="size-4" />
-          <span className="text-sm font-medium">Lean proofs</span>
-          {v.theorems.length > 0 && (
-            <span className="font-mono text-[10.5px] text-muted-foreground tabular">
-              {passed}/{v.theorems.length}
-            </span>
+          {v.status === 'passed' ? (
+            <CheckCircle2 className="size-4 text-emerald-400" />
+          ) : v.status === 'failed' ? (
+            <AlertTriangle className="size-4 text-amber-400" />
+          ) : (
+            <ShieldCheck className="size-4 text-muted-foreground" />
           )}
+          <span className="text-sm font-medium">Design checks</span>
         </div>
         <div className="flex items-center gap-1">
-          {hasFailed && (
-            <Tip label="Auto-repair failed Lean constraints with Gemini & re-verify">
-              <Button size="sm" variant="default" onClick={runRepair} disabled={repairing || v.status === 'running'}>
-                {repairing ? <Loader2 className="size-3.5 animate-spin" /> : <Wrench className="size-3.5" />}
-                Repair
-              </Button>
-            </Tip>
+          {failed.length > 0 && (
+            <Button size="sm" variant="default" onClick={handleRepair} disabled={repairing || v.status === 'running'}>
+              {repairing ? <Loader2 className="size-3.5 animate-spin" /> : <Wrench className="size-3.5" />}
+              Fix with AI
+            </Button>
           )}
-          <Button size="sm" variant="secondary" onClick={run} disabled={v.status === 'running' || repairing}>
-            {v.status === 'running' ? <Loader2 className="size-3.5 animate-spin" /> : 'Verify'}
+          <Button size="sm" variant="secondary" onClick={handleCheck} disabled={v.status === 'running' || repairing}>
+            {v.status === 'running' ? <Loader2 className="size-3.5 animate-spin" /> : 'Check'}
           </Button>
         </div>
       </div>
+
+      <p className="mt-2 text-xs text-muted-foreground">
+        {v.status === 'running'
+          ? 'Checking clearances, wiring, power, and thermal margins…'
+          : v.status === 'passed'
+          ? `Design checks passed (${passed}/${v.theorems.length} rules verified).`
+          : v.status === 'failed' && failed.length > 0
+          ? `${failed.length} ${failed.length === 1 ? 'issue needs' : 'issues need'} attention: ${failed.map((t) => t.name.replaceAll('_', ' ')).join(', ')}.`
+          : v.status === 'failed'
+          ? 'Could not complete board checks.'
+          : 'Check spacing, wiring, power budget, and thermal safety.'}
+      </p>
+
       {repairNote && (
-        <p className="mt-2 rounded border border-border bg-muted/40 p-2 font-mono text-[10.5px] text-muted-foreground">
-          {repairNote}
-        </p>
+        <p className="mt-2 rounded border border-border bg-muted/40 p-2 text-[11px] text-muted-foreground">{repairNote}</p>
       )}
+
       {v.theorems.length > 0 && (
-        <>
-          <div className="mt-3 h-1 overflow-hidden rounded-full bg-secondary">
-            <motion.div
-              className="h-full bg-foreground"
-              initial={{ width: 0 }}
-              animate={{ width: `${(passed / v.theorems.length) * 100}%` }}
-              transition={{ duration: 0.8, ease }}
-            />
-          </div>
-          <ul className="mt-3 max-h-40 space-y-1 overflow-y-auto">
-            {v.theorems.map((t, i) => (
-              <motion.li
-                key={t.name}
-                initial={{ opacity: 0, x: -6 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.04, ease }}
-                title={t.statement}
-                className="flex items-center gap-2 font-mono text-[11px]"
-              >
-                {t.ok ? <Check className="size-3" /> : <X className="size-3 text-red-300" />}
-                <span className={t.ok ? '' : 'text-red-300'}>{t.name}</span>
-              </motion.li>
+        <details className="mt-2.5 text-[11px] text-muted-foreground">
+          <summary className="cursor-pointer font-mono hover:text-foreground">
+            Technical details (Lean 4 · {passed}/{v.theorems.length})
+          </summary>
+          <ul className="mt-2 max-h-36 space-y-1 overflow-y-auto rounded border border-border bg-muted/30 p-2 font-mono text-[10.5px]">
+            {v.theorems.map((t) => (
+              <li key={t.name} title={t.statement} className="flex items-center gap-2">
+                {t.ok ? <Check className="size-3 text-emerald-400" /> : <X className="size-3 text-red-300" />}
+                <span className={t.ok ? 'text-foreground' : 'text-red-300'}>{t.name}</span>
+              </li>
             ))}
           </ul>
-        </>
+        </details>
       )}
-      {v.status === 'idle' && <p className="mt-2 text-xs text-muted-foreground">Prove clearances, connectivity, power and thermal limits.</p>}
-      {v.status === 'failed' && v.theorems.length === 0 && v.log && <p className="mt-2 line-clamp-3 font-mono text-[11px] text-red-300">{v.log}</p>}
     </div>
   )
 }
@@ -864,17 +1378,57 @@ function StatusBar() {
   const scale = useStudio((s) => s.scale)
   const hoveredDevice = useStudio((s) => s.hoveredDevice)
   const hovered = useStudio((s) => s.hovered)
-  const stats = useBoardStats(board)
+  const selectedOffers = useStudio((s) => s.selectedOfferByMpn)
   const v = useStudio((s) => s.verification)
+
+  const health = useMemo(() => analyzeSystem(sys, board), [sys, board])
+  const devCost = useMemo(() => computeSystemDevicesCost(sys, selectedOffers).totalUsd, [sys, selectedOffers])
+  const pcbCost = useMemo(() => computeBoardBomCost(board, selectedOffers).totalUsd, [board, selectedOffers])
+
+  const boardFailed = v.theorems.filter((t) => !t.ok).length
+  const hasWarnings = (scale === 'system' && health.warningCount > 0) || boardFailed > 0
+  const isAllVerified = v.status === 'passed' && health.warningCount === 0 && health.unverifiedCount === 0
+
+  const statusText =
+    v.status === 'running'
+      ? 'Checking design…'
+      : hasWarnings
+      ? `${scale === 'system' ? health.warningCount + boardFailed : boardFailed} issues need review`
+      : isAllVerified
+      ? 'Checks passed'
+      : 'Unverified properties'
+
+  const hoveredDevLabel = hoveredDevice
+    ? hoveredDevice === 'pcb'
+      ? board.name
+      : sys.devices.find((d) => d.id === hoveredDevice)?.label ?? hoveredDevice
+    : null
+  const hoveredPartLabel = hovered
+    ? board.parts.find((p) => p.ref === hovered)?.name ?? hovered
+    : null
+
   return (
     <footer className="label-mono flex h-7 shrink-0 items-center gap-4 border-t border-border px-3 !text-[10px]">
-      <span className="flex items-center gap-1.5"><span className="size-1.5 rounded-full bg-foreground" /> Ready</span>
-      <span>{scale === 'system' ? 'System' : 'Board'}</span>
-      <span className="tabular">{scale === 'system' ? `${sys.devices.length} devices` : `${board.parts.length} parts`}</span>
-      <span className="tabular">{board.nets.length} nets</span>
-      <span className="tabular">BOM ${(stats.cost + (scale === 'system' ? systemCost(sys) : 0)).toFixed(2)}</span>
-      <span>{v.status === 'passed' ? 'Proofs ✓' : v.status === 'failed' ? 'Proofs ✗' : 'Unverified'}</span>
-      <span className="ml-auto flex items-center gap-1.5"><Cpu className="size-3" /> {scale === 'system' ? hoveredDevice ?? 'Hover a device · scroll into the PCB' : hovered ?? 'Hover a part'}</span>
+      <button
+        onClick={() => setStudio((s) => ({ checksOpen: !s.checksOpen }))}
+        className="flex items-center gap-1.5 hover:text-foreground"
+      >
+        <span
+          className={cn(
+            'size-1.5 rounded-full',
+            hasWarnings ? 'bg-amber-400' : isAllVerified ? 'bg-emerald-400' : 'bg-muted-foreground',
+          )}
+        />
+        <span className={hasWarnings ? 'text-amber-300' : isAllVerified ? 'text-emerald-300' : ''}>{statusText}</span>
+      </button>
+      <span className="tabular">{scale === 'system' ? `${sys.devices.length} modules` : `${board.parts.length} parts`}</span>
+      <span className="tabular">Parts {usd(scale === 'system' ? devCost + pcbCost : pcbCost)}</span>
+      <span className="ml-auto flex items-center gap-1.5">
+        <Cpu className="size-3" />
+        {scale === 'system'
+          ? hoveredDevLabel ?? 'Click a component to inspect · Scroll into PCB'
+          : hoveredPartLabel ?? 'Click a part to inspect'}
+      </span>
     </footer>
   )
 }
@@ -884,37 +1438,50 @@ export default function App() {
   const mode = useStudio((s) => s.mode)
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
-      if ((e.target as HTMLElement).tagName === 'INPUT') return
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
       if (e.key === 'e') setStudio((s) => ({ exploded: !s.exploded, touring: false }))
       if (e.key === 't') setStudio((s) => ({ touring: !s.touring }))
-      if (e.key === 'f') { setStudio({ touring: false }); requestFit() }
-      if (e.key === 'Escape') setStudio({ selected: null, device: null, touring: false })
+      if (e.key === 'f') {
+        setStudio({ touring: false })
+        requestFit()
+      }
+      if (e.key === 'Escape') setStudio({ selected: null, device: null, checksOpen: false, touring: false })
       if (e.key === 'z') goScale(getStudio().scale === 'system' ? 'board' : 'system')
     }
     window.addEventListener('keydown', on)
     return () => window.removeEventListener('keydown', on)
   }, [])
+
   return (
     <TooltipProvider delayDuration={250}>
       <div className="flex h-dvh flex-col bg-background text-foreground">
         <TopBar />
         <div className="relative flex min-h-0 flex-1">
           <ResearchPane />
-          {mode === 'engineer' && (<>
-          {scale === 'system' ? <SystemLibrary /> : <Library />}
-          <motion.main
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 1.2, ease }}
-            className="relative min-w-0 flex-1"
-          >
-            <PcbScene />
-            <Prompt />
-            <Toolbar />
-            <ScaleTransition />
-          </motion.main>
-          {scale === 'system' ? <SystemInspector /> : <Inspector />}
-          </>)}
+          {mode === 'engineer' && (
+            <>
+              {scale === 'system' ? <SystemLibrary /> : <Library />}
+              <motion.main
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.45, ease }}
+                className="relative min-w-0 flex-1"
+              >
+                <PcbScene />
+                <CopilotBar />
+                <AnimatePresence>
+                  <DesignChecksDrawer />
+                </AnimatePresence>
+                <AnimatePresence>
+                  <ChangeToast />
+                </AnimatePresence>
+                <Toolbar />
+                <ScaleTransition />
+              </motion.main>
+              {scale === 'system' ? <SystemInspector /> : <Inspector />}
+            </>
+          )}
         </div>
         <StatusBar />
       </div>

@@ -294,6 +294,9 @@ export function repairPlugin(): Plugin {
         try {
           const body = await readJson(req)
           const inputBoard = body.board as BoardData | undefined
+          const suppliedVerification = body.verification as
+            | { status?: string; theorems?: { name: string; statement: string; ok: boolean; error?: string }[]; diagnostics?: string[] }
+            | undefined
           if (!inputBoard || !Array.isArray(inputBoard.parts) || !Array.isArray(inputBoard.nets)) {
             return sendJson(res, 400, { error: 'expected { board }' })
           }
@@ -303,8 +306,10 @@ export function repairPlugin(): Plugin {
           }
           const fpMod = (await server.ssrLoadModule('/src/pcb/footprint.ts')) as FootprintMod
 
-          const initialCert = toLeanMod.buildCertificate(inputBoard)
-          const initialVer = await verifyCertificate(initialCert, verifyDir, 60_000)
+          const initialVer =
+            suppliedVerification && Array.isArray(suppliedVerification.theorems) && suppliedVerification.theorems.length > 0
+              ? suppliedVerification
+              : await verifyCertificate(toLeanMod.buildCertificate(inputBoard), verifyDir, 60_000)
           if (initialVer.status === 'passed') {
             return sendJson(res, 200, {
               repaired: true,
@@ -317,19 +322,18 @@ export function repairPlugin(): Plugin {
           }
 
           const working: BoardData = JSON.parse(JSON.stringify(inputBoard))
-          const failedTheorems = initialVer.theorems.filter((t) => !t.ok)
+          const failedTheorems = (initialVer.theorems ?? []).filter((t) => !t.ok)
           const apiKey = resolveApiKey(env)
           let aiRationale = ''
           let actor: 'gemini' | 'deterministic_solver' = 'deterministic_solver'
 
           if (apiKey) {
             try {
-              const model = env.FORGE_GEMINI_MODEL || MODELS.carbon
+              const model = MODELS.carbon
               const promptSummary = {
                 boardSize: { width: working.width, height: working.height },
                 failedTheorems: failedTheorems.map((t) => ({ name: t.name, statement: t.statement, error: t.error })),
-                diagnostics: (initialVer.diagnostics ?? []).slice(0, 25),
-                parts: working.parts.map((p) => ({ ref: p.ref, kind: p.kind, x: p.x, y: p.y, rot: p.rot })),
+                diagnostics: (initialVer.diagnostics ?? []).slice(0, 12),
                 nets: working.nets.map((n, index) => ({
                   index,
                   name: n.name,
@@ -342,12 +346,13 @@ export function repairPlugin(): Plugin {
                 model,
                 system:
                   'You are Forge PCB Studio autonomous Lean 4 repair engineer. Given failed formal PCB theorems and diagnostics, ' +
-                  'propose minimal partMoves, netEdits (switching crossing traces between top and bottom copper or widening traces for ampacity), ' +
-                  'or board outline adjustments to satisfy all JLCPCB 2-layer and electrical rules. Never remove parts or nets.',
+                  'propose minimal netEdits (switching crossing traces between top and bottom copper or widening traces for ampacity) ' +
+                  'or partMoves to satisfy all JLCPCB 2-layer and electrical rules. Keep response compact.',
                 prompt: JSON.stringify(promptSummary),
                 schema: REPAIR_SCHEMA,
                 temperature: 0.2,
-                timeoutMs: 45_000,
+                signal: AbortSignal.timeout(12_000),
+                timeoutMs: 12_000,
               })) as {
                 width?: number
                 height?: number

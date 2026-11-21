@@ -1,12 +1,21 @@
 import { useSyncExternalStore } from 'react'
 import { board as defaultBoard, type Board } from '@/data/board'
-import { defaultSystem, type SystemDesign } from '@/data/system'
+import { byId } from '@/data/catalog'
+import {
+  analyzeDevice,
+  defaultSystem,
+  modelFidelity,
+  systemCost,
+  unitPrice,
+  type SystemDesign,
+} from '@/data/system'
 import type { Verification } from '@/verify/types'
 
 export type ViewMode = '3d' | 'top' | 'bottom'
 export type Scale = 'board' | 'system'
 export type ExportFormat = 'stl' | 'glb' | 'obj' | 'png' | 'json'
 export type OfferMatchKind = 'exact_match' | 'bundle_or_pack' | 'variant_or_accessory'
+export type LabelMode = 'contextual' | 'all' | 'off'
 
 export interface ShopOffer {
   offerId: string
@@ -36,36 +45,51 @@ export interface ShopSearchEntry {
 }
 
 export interface HistoryEntry {
+  system: SystemDesign
   board: Board
   verification: Verification
+  budgetUsd: number | null
+  selectedOfferByMpn: Record<string, ShopOffer>
   label: string
+}
+
+export interface ChangeFeedback {
+  id: number
+  summary: string
+  tone: 'info' | 'ok' | 'warn'
 }
 
 export interface StudioState {
   scale: Scale // 'system' = whole assembly, 'board' = the custom PCB
-  mode: 'research' | 'engineer' // research swarm (friend's FastAPI app) or the PCB studio
-  pendingPrompt: string | null // board brief waiting for the Gemini prompt bar to run
+  mode: 'research' | 'engineer'
+  pendingPrompt: string | null
   system: SystemDesign
-  device: string | null // selected system device id
+  device: string | null // selected system device id ('pcb' or device id)
   hoveredDevice: string | null
-  board: Board // the board being viewed/edited; AI generation replaces it
+  board: Board
   verification: Verification
   history: HistoryEntry[]
   lastDiff: string[]
+  lastChange: ChangeFeedback | null
   budgetUsd: number | null
   shopByMpn: Record<string, ShopSearchEntry>
   selectedOfferByMpn: Record<string, ShopOffer>
   inspectorTab: 'inspect' | 'bom'
-  selected: string | null // part ref, e.g. "U1"
+  systemTab: 'inspect' | 'bom'
+  leftPanelOpen: boolean
+  checksOpen: boolean
+  labelMode: LabelMode
+  showAllWires: boolean
+  selected: string | null // board part ref, e.g. "U1"
   hovered: string | null
   hoveredNet: string | null
-  exploded: boolean // components lift off the board
-  touring: boolean // cinematic showcase tour is playing
+  exploded: boolean
+  touring: boolean
   view: ViewMode
   showTraces: boolean
   showSilk: boolean
-  showCallouts: boolean // numbered "01" leader tags on major parts
-  fitNonce: number // bump to request camera fit
+  showCallouts: boolean // legacy alias kept in sync with labelMode !== 'off'
+  fitNonce: number
   exportRequest: { format: ExportFormat; nonce: number } | null
 }
 
@@ -102,8 +126,38 @@ export function computeBoardBomCost(
   return { totalUsd: +total.toFixed(4), unpricedCount: unpriced }
 }
 
+export function computeSystemDevicesCost(
+  sys: SystemDesign,
+  selectedOfferByMpn: Record<string, ShopOffer> = {},
+): { totalUsd: number; unpricedCount: number } {
+  let total = 0
+  let unpriced = 0
+  for (const d of sys.devices) {
+    const item = byId[d.catalogId]
+    if (!item) {
+      unpriced++
+      continue
+    }
+    const offer = selectedOfferByMpn[item.mpn]
+    if (offer && offer.matchKind === 'exact_match' && offer.available && offer.priceUsd != null) {
+      total += offer.priceUsd
+    } else if (item.pricing[0]?.unit != null) {
+      total += item.pricing[0].unit
+    } else {
+      unpriced++
+    }
+  }
+  return { totalUsd: +total.toFixed(4), unpricedCount: unpriced }
+}
+
+let changeCounter = 0
+
 let state: StudioState = {
-  scale: new URLSearchParams(location.search).get('scale') === 'board' || new URLSearchParams(location.search).has('brief') ? 'board' : 'system',
+  scale:
+    new URLSearchParams(location.search).get('scale') === 'board' ||
+    new URLSearchParams(location.search).has('brief')
+      ? 'board'
+      : 'system',
   mode: new URLSearchParams(location.search).get('mode') === 'research' ? 'research' : 'engineer',
   pendingPrompt: briefFromUrl(),
   system: defaultSystem,
@@ -113,15 +167,21 @@ let state: StudioState = {
   verification: { status: 'idle', theorems: [] },
   history: [],
   lastDiff: [],
-  budgetUsd: 15,
+  lastChange: null,
+  budgetUsd: 40,
   shopByMpn: {},
   selectedOfferByMpn: {},
   inspectorTab: 'inspect',
+  systemTab: 'inspect',
+  leftPanelOpen: true,
+  checksOpen: false,
+  labelMode: 'contextual',
+  showAllWires: false,
   selected: 'U1',
   hovered: null,
   hoveredNet: null,
   exploded: false,
-  touring: true,
+  touring: false,
   view: '3d',
   showTraces: true,
   showSilk: true,
@@ -136,6 +196,80 @@ export function setStudio(patch: Partial<StudioState> | ((s: StudioState) => Par
   const next = typeof patch === 'function' ? patch(state) : patch
   state = { ...state, ...next }
   listeners.forEach((l) => l())
+}
+
+function snapshotHistory(label: string): HistoryEntry {
+  return {
+    system: JSON.parse(JSON.stringify(state.system)),
+    board: JSON.parse(JSON.stringify(state.board)),
+    verification: state.verification,
+    budgetUsd: state.budgetUsd,
+    selectedOfferByMpn: { ...state.selectedOfferByMpn },
+    label,
+  }
+}
+
+export function commitSystemSwap(
+  deviceId: string,
+  catalogId: string,
+  opts: { applyToMatching?: boolean } = {},
+) {
+  const target = state.system.devices.find((d) => d.id === deviceId)
+  const nextItem = byId[catalogId]
+  if (!target || !nextItem) return
+  if (target.catalogId === catalogId && !opts.applyToMatching) return
+
+  const prevCatalogId = target.catalogId
+  const prevItem = byId[prevCatalogId]
+  const prevTotal = systemCost(state.system)
+
+  const matchingIds = opts.applyToMatching
+    ? state.system.devices
+        .filter((d) => d.bus === target.bus && d.catalogId === prevCatalogId)
+        .map((d) => d.id)
+    : [deviceId]
+
+  const nextDevices = state.system.devices.map((d) =>
+    matchingIds.includes(d.id) ? { ...d, catalogId } : d,
+  )
+  const nextSystem: SystemDesign = { ...state.system, devices: nextDevices }
+  const nextTotal = systemCost(nextSystem)
+  const delta = +(nextTotal - prevTotal).toFixed(2)
+  const updatedDev = nextDevices.find((d) => d.id === deviceId)!
+  const check = analyzeDevice(updatedDev, state.board)
+  const fid = modelFidelity(nextItem)
+
+  const deltaTxt =
+    Math.abs(delta) < 0.01 ? '$0.00' : `${delta > 0 ? '+' : '−'}$${Math.abs(delta).toFixed(2)}`
+  const countPrefix =
+    matchingIds.length > 1 ? `${matchingIds.length} ${target.role.toLowerCase()}s replaced` : `${target.label} replaced`
+  const statusNote =
+    check.severity === 'ok'
+      ? 'Compatible'
+      : check.severity === 'unverified'
+      ? check.headline
+      : 'Power compatibility needs review'
+  const summary = `${countPrefix} (${nextItem.name}) · ${deltaTxt} · ${statusNote}`
+
+  const diffs = [
+    `${countPrefix}: ${prevItem?.name ?? prevCatalogId} → ${nextItem.name}`,
+    `System parts ${deltaTxt} (now $${nextTotal.toFixed(2)})`,
+    statusNote,
+  ]
+  if (fid.kind === 'proxy') diffs.push('3D preview uses dimensioned proxy')
+
+  const label = `${countPrefix} → ${nextItem.name}`
+  setStudio({
+    history: [...state.history.slice(-19), snapshotHistory(label)],
+    system: nextSystem,
+    lastDiff: diffs,
+    lastChange: {
+      id: ++changeCounter,
+      summary,
+      tone: check.severity === 'ok' ? 'ok' : check.severity === 'warning' ? 'warn' : 'info',
+    },
+    touring: false,
+  })
 }
 
 export function commitBoardEdit(
@@ -157,36 +291,51 @@ export function commitBoardEdit(
     diffs.push(`Outline ${prev.width}×${prev.height} → ${draft.width}×${draft.height} mm`)
   }
   if (Math.abs(costDelta) >= 0.01) {
-    diffs.push(`BOM ${costDelta > 0 ? '+' : '-'}$${Math.abs(costDelta).toFixed(2)}`)
+    diffs.push(`Parts ${costDelta > 0 ? '+' : '−'}$${Math.abs(costDelta).toFixed(2)}`)
   } else {
-    diffs.push('Hardware BOM unchanged')
+    diffs.push('Parts cost unchanged')
   }
   if (!nextVerification && state.verification.status !== 'idle') {
-    diffs.push('Proofs invalidated — re-verify')
+    diffs.push('Design checks need re-run')
   } else if (nextVerification?.status === 'passed') {
-    diffs.push('Lean 4 proofs ✓')
+    diffs.push('All design checks passed')
   }
 
   setStudio({
-    history: [...state.history.slice(-19), { board: prev, verification: state.verification, label }],
+    history: [...state.history.slice(-19), snapshotHistory(label)],
     board: draft,
     verification: nextVerification ?? { status: 'idle', theorems: [] },
     lastDiff: diffs,
+    lastChange: {
+      id: ++changeCounter,
+      summary: diffs.slice(0, 2).join(' · '),
+      tone: nextVerification?.status === 'passed' ? 'ok' : 'info',
+    },
     touring: false,
   })
 }
 
-export function undoBoardEdit() {
+export function undoLastEdit() {
   if (!state.history.length) return
   const last = state.history[state.history.length - 1]
   setStudio({
+    system: last.system,
     board: last.board,
     verification: last.verification,
+    budgetUsd: last.budgetUsd,
+    selectedOfferByMpn: last.selectedOfferByMpn,
     history: state.history.slice(0, -1),
-    lastDiff: [`Reverted: ${last.label}`],
+    lastDiff: [`Undid: ${last.label}`],
+    lastChange: {
+      id: ++changeCounter,
+      summary: `Undid: ${last.label}`,
+      tone: 'info',
+    },
     touring: false,
   })
 }
+
+export const undoBoardEdit = undoLastEdit
 
 export function getStudio() {
   return state
@@ -205,3 +354,11 @@ export function useStudio<T>(select: (s: StudioState) => T): T {
 export const requestFit = () => setStudio((s) => ({ fitNonce: s.fitNonce + 1 }))
 export const requestExport = (format: ExportFormat) =>
   setStudio((s) => ({ exportRequest: { format, nonce: (s.exportRequest?.nonce ?? 0) + 1 } }))
+export const cycleLabelMode = () =>
+  setStudio((s) => {
+    const order: LabelMode[] = ['contextual', 'all', 'off']
+    const next = order[(order.indexOf(s.labelMode) + 1) % order.length]
+    return { labelMode: next, showCallouts: next !== 'off' }
+  })
+
+export { unitPrice }

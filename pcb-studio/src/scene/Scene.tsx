@@ -1,6 +1,6 @@
 // Forge 3D board scene. Studio lighting recipe adapted from STC-B Board 3D Viewer
 // (Apache-2.0), https://github.com/DeliciousBuding/stcb-board-3d-viewer
-import { useEffect, useMemo, useRef } from 'react'
+import { memo, useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber'
 import { CameraControls, Html, Line } from '@react-three/drei'
@@ -61,16 +61,17 @@ function Studio() {
       <directionalLight position={[10, 30, -85]} intensity={1.25} />
       <directionalLight position={[-45, -95, -60]} intensity={2.25} visible={back} />
       <mesh rotation-x={-Math.PI / 2} position-y={floorY} receiveShadow visible={!back} userData={{ noExport: true }}>
-        <planeGeometry args={[2000, 2000]} />
-        <meshStandardMaterial color={0x141518} roughness={0.96} />
+        <planeGeometry args={[2600, 2600]} />
+        <meshStandardMaterial color={0x111316} roughness={0.96} />
       </mesh>
-      <gridHelper args={sys ? [1200, 120, 0x2c2f34, 0x1c1e22] : [400, 80, 0x2c2f34, 0x1c1e22]} position-y={floorY + 0.02} visible={!back} userData={{ noExport: true }} />
+      <fog attach="fog" args={['#0c0d0f', sys ? 780 : 240, sys ? 1850 : 620]} />
+      <gridHelper args={sys ? [960, 48, 0x22252b, 0x17191d] : [360, 36, 0x22252b, 0x17191d]} position-y={floorY + 0.02} visible={!back} userData={{ noExport: true }} />
     </>
   )
 }
 
 /** Board substrate: rounded outline with holes, top artwork from the netlist. */
-export function BoardMesh({ board, traces }: { board: Board; traces: Trace[] }) {
+export const BoardMesh = memo(function BoardMesh({ board, traces }: { board: Board; traces: Trace[] }) {
   const showTraces = useStudio((s) => s.showTraces)
   const showSilk = useStudio((s) => s.showSilk)
   const artwork = useMemo(() => createBoardArtwork(board, traces, { traces: true, silk: true }), [board, traces])
@@ -138,7 +139,7 @@ export function BoardMesh({ board, traces }: { board: Board; traces: Trace[] }) 
   }, [artwork])
 
   return <mesh geometry={geometry} material={mats} castShadow receiveShadow name="substrate" />
-}
+})
 
 const easeOutBack = (t: number) => {
   const c1 = 1.25, c3 = c1 + 1
@@ -149,9 +150,9 @@ function explodeHeight(p: Part) {
   return 7 + partHeight(p) * 0.9 + (p.kind === 'chip' ? 2 : 0)
 }
 
-export function Parts({ board, passive = false }: { board: Board; passive?: boolean }) {
+export const Parts = memo(function Parts({ board, passive = false }: { board: Board; passive?: boolean }) {
   const exploded = useStudio((s) => s.exploded)
-  const showCallouts = useStudio((s) => s.showCallouts)
+  const labelMode = useStudio((s) => s.labelMode)
   const hovered = useStudio((s) => s.hovered)
   const selected = useStudio((s) => s.selected)
   const models = useMemo(() => board.parts.map((p) => buildPart(p)), [board])
@@ -224,12 +225,16 @@ export function Parts({ board, passive = false }: { board: Board; passive?: bool
           onClick={passive ? undefined : click}
         >
           <primitive object={models[i]} />
-          {showCallouts && !passive && p.major && (
-            <Html position={[0, partHeight(p) + 1.6, 0]} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
+          {!passive &&
+            ((labelMode === 'all' && p.major) ||
+              (labelMode === 'contextual' && (selected === p.ref || hovered === p.ref))) && (
+            <Html position={[0, partHeight(p) + 2.2, 0]} center zIndexRange={[20, 0]} style={{ pointerEvents: 'none' }}>
               <div className={`forge-tag ${selected === p.ref ? 'is-active' : ''}`}>
-                <span className="forge-tag-n">{String(majors.indexOf(p.ref) + 1).padStart(2, '0')}</span>
-                <span>{p.ref}</span>
-                <span className="forge-tag-sub">{p.name}</span>
+                {labelMode === 'all' && (
+                  <span className="forge-tag-n">{String(majors.indexOf(p.ref) + 1).padStart(2, '0')}</span>
+                )}
+                <span>{p.name}</span>
+                <span className="forge-tag-sub">{p.ref}</span>
               </div>
             </Html>
           )}
@@ -240,7 +245,7 @@ export function Parts({ board, passive = false }: { board: Board; passive?: bool
       </lineSegments>
     </>
   )
-}
+})
 
 /** Footprint brackets for hover / selection (drawn just above the mask). */
 function FootprintHighlight({ board }: { board: Board }) {
@@ -324,16 +329,19 @@ function CameraRig({ board, root }: { board: Board; root: React.RefObject<THREE.
     // cinematic intro: continue the system-scale dive if there is one,
     // otherwise glide from straight above down to a 3/4 hero angle
     const h = takeHandoff()
-    if (h) c.setLookAt(h.pos.x, h.pos.y, h.pos.z, h.target.x, h.target.y, h.target.z, false)
-    else c.setLookAt(0, size * 3.2, 0.01, 0, 0, 0, false)
-    const id = setTimeout(() => {
-      c.smoothTime = 1.1
-      c.setLookAt(size * 0.85, size * 1.1, size * 1.45, 0, 0, 0, true).then(() => {
-        c.smoothTime = 0.45
-        intro.current = false
-      })
-    }, 120)
-    return () => clearTimeout(id)
+    if (h) {
+      c.setLookAt(h.pos.x, h.pos.y, h.pos.z, h.target.x, h.target.y, h.target.z, false)
+      const id = setTimeout(() => {
+        c.smoothTime = 0.85
+        c.setLookAt(size * 0.95, size * 1.15, size * 1.55, 0, 0, 0, true).then(() => {
+          c.smoothTime = 0.45
+          intro.current = false
+        })
+      }, 60)
+      return () => clearTimeout(id)
+    }
+    c.setLookAt(size * 0.95, size * 1.15, size * 1.55, 0, 0, 0, false)
+    intro.current = false
   }, [size])
 
   // scroll out past the board → back to the system view, carrying the camera pose
