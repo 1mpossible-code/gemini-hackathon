@@ -35,6 +35,7 @@ export interface GeminiCallOpts {
   prompt: string
   schema: Record<string, unknown>
   temperature?: number
+  thinkingBudget?: number
   signal?: AbortSignal
   timeoutMs?: number
 }
@@ -62,6 +63,7 @@ export async function callGemini(apiKey: string, o: GeminiCallOpts, onUsage?: (u
       responseMimeType: 'application/json',
       responseSchema: o.schema,
       temperature: o.temperature ?? 0.3,
+      ...(typeof o.thinkingBudget === 'number' ? { thinkingConfig: { thinkingBudget: o.thinkingBudget } } : {}),
     },
   })
   let lastErr: unknown

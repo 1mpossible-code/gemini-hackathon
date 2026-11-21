@@ -26,6 +26,21 @@ try {
  await fs.rm(fresh, {recursive:true})
  assert.equal(independent.status, after.status)
  assert.deepEqual(independent.theorems, after.theorems)
- await fs.writeFile('/tmp/forge-routing-results.json', JSON.stringify({before,after,independent,notes,routingMs,board:repaired}, null, 2))
+ // Extra Lean diagnostic only: enumerate every violating segment pair without the report's 20-line cap.
+ const diagnosticCert = buildCertificate(repaired)
+ diagnosticCert.source = diagnosticCert.source.replace('end Forge.Generated', `
+private def fullViolations : List Seg → List String
+  | [] => []
+  | s :: rest => (rest.filterMap fun t =>
+      if s.net ≠ t.net ∧ s.layer = t.layer ∧ segClear s t (Rules.clearReq board s t) = false then
+        some s!"FORGE|trace_detail|{s.net} {Report.showPt s.a}-{Report.showPt s.b} vs {t.net} {Report.showPt t.a}-{Report.showPt t.b} ({repr s.layer})"
+      else none) ++ fullViolations rest
+#eval IO.println (String.intercalate "\\n" (fullViolations board.segs))
+end Forge.Generated`)
+ const detailed = await verifyCertificate(diagnosticCert, dir)
+ const allViolations = detailed.diagnostics.filter(d => d.startsWith('trace_detail|'))
+ assert.equal(detailed.status, after.status)
+ assert.equal(allViolations.length, Number(after.diagnostics.find(d => d.includes('same-layer segment pairs')).split('|')[1].split(' ')[0]))
+ await fs.writeFile('/tmp/forge-routing-results.json', JSON.stringify({before,after,independent,notes,routingMs,board:repaired,allViolations}, null, 2))
  for (const [name, result] of Object.entries({before,after,independent})) console.log(name, result.status, result.theorems.filter(t=>t.ok).length, result.durationMs, result.diagnostics?.filter(d=>d.startsWith('trace_clearance')))
 } finally { await server.close() }

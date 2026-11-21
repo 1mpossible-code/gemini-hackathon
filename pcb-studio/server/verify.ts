@@ -68,7 +68,7 @@ export function parseErrors(log: string): LeanError[] {
 }
 
 export function parseDiagnostics(log: string): string[] {
-  return [...log.matchAll(/^FORGE\|(.*)$/gm)].map((m) => m[1])
+  return [...log.matchAll(/(?:^|: )FORGE\|(.*)$/gm)].map((m) => m[1])
 }
 
 /** Run the full pipeline for one certificate. Serialised: lake builds share one directory. */
