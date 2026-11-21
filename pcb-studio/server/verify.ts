@@ -6,8 +6,8 @@
 import { spawn } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, writeFile } from 'node:fs/promises'
-import { homedir } from 'node:os'
+import { cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { homedir, tmpdir } from 'node:os'
 import path from 'node:path'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import type { Plugin } from 'vite'
@@ -82,6 +82,19 @@ export function verifyCertificate(cert: Certificate, projectDir: string, timeout
 }
 
 async function buildCertificate(cert: Certificate, projectDir: string, timeoutMs: number): Promise<Verification> {
+  const fresh = await mkdtemp(path.join(tmpdir(), 'forge-proof-'))
+  try {
+    for (const entry of ['Forge', 'Forge.lean', 'lakefile.toml', 'lake-manifest.json', 'lean-toolchain']) {
+      await cp(path.join(projectDir, entry), path.join(fresh, entry), { recursive: true })
+    }
+    return await buildIsolatedCertificate(cert, fresh, timeoutMs)
+  } finally {
+    await rm(fresh, { recursive: true, force: true })
+  }
+}
+
+// Separate proof directories also protect against other Vite runtimes or processes.
+async function buildIsolatedCertificate(cert: Certificate, projectDir: string, timeoutMs: number): Promise<Verification> {
   const t0 = Date.now()
   await mkdir(path.join(projectDir, 'Forge'), { recursive: true })
   await writeFile(path.join(projectDir, 'Forge', 'Generated.lean'), cert.source)
