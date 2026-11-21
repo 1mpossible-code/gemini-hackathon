@@ -1,0 +1,6 @@
+/CircuitMind/
+/.venv/
+/.env
+__pycache__/
+.playwright-cli/
+.ruff_cache/

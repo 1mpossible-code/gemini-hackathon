@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101112">
+  <meta name="description" content="Start a FORGE hardware project with a plain-language design brief.">
+  <title>FORGE Studio</title>
+  <link rel="icon" href="/static/forge.svg" type="image/svg+xml">
+  <link rel="preload" href="/static/instrument.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/static/studio.css">
+  <link rel="stylesheet" href="/static/research-map.css">
+  <script type="module" src="/static/studio.js"></script>
+</head>
+<body>
+  <svg class="symbols" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <symbol id="mark" viewBox="0 0 32 32">
+      <path d="m4 10 12-7 12 7-12 7-12-7Zm0 6 12 7 12-7M4 22l12 7 12-7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    </symbol>
+    <symbol id="arrow" viewBox="0 0 24 24"><path d="M5 12h13m-5-5 5 5-5 5"/></symbol>
+    <symbol id="corner" viewBox="0 0 24 24"><path d="M6 18 18 6M8 6h10v10"/></symbol>
+    <symbol id="wave" viewBox="0 0 24 24"><path d="M3 12h4l3-7 4 14 3-7h4"/></symbol>
+    <symbol id="play" viewBox="0 0 24 24"><path d="m9 6 9 6-9 6V6Z"/></symbol>
+  </svg>
+
+  <a class="skip-link" href="#main">Skip to design brief</a>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="FORGE Studio home"><svg aria-hidden="true"><use href="#mark"/></svg><span>FORGE</span></a>
+    <span class="location"><span class="separator" aria-hidden="true">/</span> New brief</span>
+    <span id="connection" class="connection" role="status"><i aria-hidden="true"></i><span>Checking Gemini…</span></span>
+  </header>
+
+  <main id="main">
+    <section id="brief-view" class="hero" aria-labelledby="title">
+      <div class="compose">
+        <h1 id="title">What do you<br> want to build?</h1>
+        <p class="lede">Describe a device. FORGE researches parts, checks compatibility, and drafts an engineering brief.</p>
+
+        <form id="composer">
+          <div class="composer-shell">
+            <label for="brief">Design brief</label>
+            <textarea id="brief" name="brief" rows="4" maxlength="4000" required autocomplete="off" aria-keyshortcuts="Control+Enter Meta+Enter" placeholder="A wristband that reads muscle signals and sends finger gestures to my laptop over Bluetooth. Keep parts under $100."></textarea>
+            <div class="form-tools">
+              <span id="brief-help" class="shortcut" aria-hidden="true"><kbd id="modifier">Ctrl</kbd><span>+</span><kbd>Enter</kbd></span>
+              <button id="run" class="primary" type="submit"><span id="run-label">Research design</span><svg aria-hidden="true"><use href="#arrow"/></svg></button>
+            </div>
+          </div>
+        </form>
+        <p id="feedback" class="feedback" role="status"></p>
+
+        <div class="example-row">
+          <button id="fill-example" type="button" class="example">
+            <svg aria-hidden="true"><use href="#wave"/></svg><span>Use wristband brief</span><svg class="example-arrow" aria-hidden="true"><use href="#corner"/></svg>
+          </button>
+          <button id="run-sample" type="button" class="sample">
+            <svg aria-hidden="true"><use href="#play"/></svg> Run offline sample
+          </button>
+        </div>
+      </div>
+
+      <figure class="study">
+        <img src="/static/wristband.webp" width="1500" height="1000" alt="Exploded wristband concept with a circuit board suspended between the shell and a translucent cover." fetchpriority="high">
+        <div class="frame-mark frame-top" aria-hidden="true"></div>
+        <div class="frame-mark frame-bottom" aria-hidden="true"></div>
+        <figcaption><span>Concept study</span><strong>EMG gesture wristband</strong></figcaption>
+      </figure>
+    </section>
+
+    <section id="research-view" class="research-view" aria-labelledby="research-title" hidden>
+      <div class="research-heading">
+        <div>
+          <h2 id="research-title" tabindex="-1">Research map</h2>
+          <p id="map-brief" class="map-brief"></p>
+        </div>
+        <div class="research-actions">
+          <button id="stop-research" class="example" type="button" hidden>Stop research</button>
+          <button id="edit-brief" class="example" type="button" hidden>Edit brief</button>
+          <a id="view-research-report" class="primary" href="#result" hidden>View report <svg aria-hidden="true"><use href="#arrow"/></svg></a>
+        </div>
+      </div>
+      <div class="research-console">
+        <div class="research-toolbar">
+          <p id="map-status" class="map-status" role="status"><span class="map-status-dot" aria-hidden="true"></span><span>Starting research</span></p>
+          <span id="map-mode" class="map-mode"></span>
+        </div>
+        <div class="research-layout">
+          <div class="map-panel">
+            <div id="map-viewport" class="map-viewport">
+              <div id="map-network" class="map-network" role="group" aria-label="Research and build decisions">
+                <svg id="map-wires" class="map-wires" aria-hidden="true"></svg>
+              </div>
+            </div>
+            <div class="map-zoom" aria-label="Graph zoom">
+              <button type="button" class="zoom-button" id="map-out" aria-label="Zoom out">−</button>
+              <button type="button" class="zoom-button zoom-fit" id="map-fit" aria-label="Reset graph zoom">100%</button>
+              <button type="button" class="zoom-button" id="map-in" aria-label="Zoom in">+</button>
+            </div>
+          </div>
+          <aside id="map-inspector" class="map-inspector" aria-label="Decision details" tabindex="-1">
+            <div class="map-inspector-tools">
+              <strong>Inspection</strong>
+              <button type="button" id="map-follow" class="map-follow" aria-pressed="true">Follow live</button>
+            </div>
+            <div id="map-detail" class="map-detail"></div>
+            <div class="map-activity">
+              <h3>Event log</h3>
+              <ol id="map-log" aria-label="Research events"></ol>
+            </div>
+            <button id="map-back" class="example map-back" type="button">Back to graph</button>
+          </aside>
+        </div>
+      </div>
+    </section>
+
+    <section id="result" class="results" aria-labelledby="result-title" hidden>
+      <div class="result-top">
+        <div><h2 id="result-title" tabindex="-1">Research report</h2><p id="result-mode" class="result-mode"></p></div>
+        <button id="download" class="example" type="button">Export report <svg aria-hidden="true"><use href="#arrow"/></svg></button>
+      </div>
+      <p id="result-brief" class="result-brief"></p>
+      <section id="prototype" class="prototype" aria-labelledby="prototype-title" hidden>
+        <div class="prototype-head">
+          <div>
+            <h3 id="prototype-title">Prototype assembly</h3>
+            <p id="prototype-revision" class="prototype-meta"></p>
+          </div>
+          <a id="download-model" class="example" download="forge-assembly.glb">Download GLB</a>
+        </div>
+        <div class="assembly-layout">
+          <div class="viewport">
+            <div id="assembly-canvas" class="assembly-canvas"></div>
+            <p id="viewport-status" class="viewport-status" role="status"></p>
+            <div id="viewport-controls" class="viewport-controls" hidden>
+              <p id="view-help" class="viewport-help"><span class="mouse-help">Drag to orbit · Scroll to zoom</span><span class="touch-help">Drag to orbit · Pinch to zoom</span></p>
+              <button id="explode-view" class="view-button" type="button" aria-pressed="true">Explode view</button>
+              <button id="reset-view" class="view-button" type="button">Reset view</button>
+            </div>
+          </div>
+          <div class="assembly-inspector">
+            <form id="wrist-form" class="wrist-form">
+              <label for="wrist-size">Wrist circumference</label>
+              <div class="wrist-controls">
+                <div class="measure-input">
+                  <input id="wrist-size" name="wrist-size" type="number" min="120" max="240" step="any" required inputmode="decimal" aria-describedby="wrist-unit">
+                  <span id="wrist-unit">mm</span>
+                </div>
+                <button id="apply-wrist" class="example" type="submit">Apply</button>
+              </div>
+              <p id="revision-status" class="revision-status" role="status"></p>
+            </form>
+            <div class="part-inspector">
+              <h4>Assembly parts</h4>
+              <ul id="assembly-parts" class="assembly-parts"></ul>
+              <div id="selected-part" class="selected-part" hidden>
+                <strong id="selected-label"></strong>
+                <p id="selected-meta"></p>
+                <a id="selected-source" target="_blank" rel="noopener noreferrer" hidden>Part reference</a>
+              </div>
+            </div>
+          </div>
+        </div>
+        <details id="fit-notes" class="fit-notes" hidden>
+          <summary>Fit and fidelity</summary>
+          <ul id="fit-findings"></ul>
+        </details>
+      </section>
+      <p id="prototype-error" class="feedback" role="status"></p>
+      <dl id="requirements" class="requirements" aria-label="Brief requirements"></dl>
+      <div class="report-grid">
+        <section><h3>Parts</h3><p id="subtotal"></p><ul id="parts"></ul></section>
+        <section><h3>Compatibility checks</h3><ul id="findings"></ul></section>
+      </div>
+      <section class="next-steps"><h3>Next steps</h3><ul id="next-steps"></ul></section>
+    </section>
+  </main>
+
+  <footer class="footer">Catalog covers EMG wearables</footer>
+</body>
+</html>
