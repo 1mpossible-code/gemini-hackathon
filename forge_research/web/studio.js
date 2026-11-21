@@ -178,8 +178,11 @@ async function startResearch(mode) {
 // navigates to the studio (FORGE_PCB_URL from /api/session).
 // Served under /research/ by the PCB studio: the studio is this origin's root.
 const sameOriginStudio = location.pathname.startsWith("/research");
-let pcbUrl = sameOriginStudio ? `${location.origin}/` : "http://127.0.0.1:5173/";
-function engineerPcb() {
+// Vite binds "localhost", which can be IPv6 only, so 127.0.0.1 may refuse.
+let pcbUrl = sameOriginStudio ? `${location.origin}/` : "http://localhost:5173/";
+// Resolves once /api/session has supplied the real studio address.
+let sessionLoaded = Promise.resolve();
+async function engineerPcb() {
   const report = latestCompletedReport;
   if (!report) return;
   const parts = (report.review?.selected_parts || []).map(p => ({
@@ -189,6 +192,8 @@ function engineerPcb() {
   if (window.parent !== window) {
     window.parent.postMessage(message, location.origin);
   } else {
+    // A fast run (?run=sample) can finish before the session answers; wait for the address.
+    await sessionLoaded;
     const url = new URL(pcbUrl);
     url.searchParams.set("brief", report.brief);
     url.searchParams.set("parts", parts.map(p => p.name).join(", "));
@@ -261,7 +266,7 @@ bindWorkbenchEvents(
   }
 );
 
-Promise.all([
+sessionLoaded = Promise.all([
   fetch("/api/session").then(r => (r.ok ? r.json() : null)),
   fetch("/api/catalog").then(r => (r.ok ? r.json() : null)),
 ])
