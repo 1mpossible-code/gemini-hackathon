@@ -1,5 +1,7 @@
 /CircuitMind/
 /.venv/
+/.venv-shape/
+/.local-3d/
 /.env
 __pycache__/
 .playwright-cli/

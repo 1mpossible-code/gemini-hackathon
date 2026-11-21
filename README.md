@@ -25,9 +25,9 @@ uv run --locked --python 3.12 python -m forge_research.studio   # research swarm
 cd pcb-studio && npm install && npm run dev                      # studio on :5173
 ```
 
-### Whole-object 3D concepts
+### Local 3D assemblies
 
-The engineering studio can generate a visual model of the full object for each prompt and show it in the System view. Set `MESHY_API_KEY` in `pcb-studio/.env.local` (or in the server environment), then restart the Vite server. Meshy charges credits for the shape and texturing stages. The prompt is sent to Meshy. The generated GLB can be rotated and downloaded from the status panel. It is a visual concept, not a verified mechanical design; the PCB and concept are generated separately. The preview remains available if texturing fails. Model links are held in server memory and expire when the server restarts.
+The engineering studio builds procedural 3D assemblies locally in the System view. Built-in shapes include a four-wheel rover, wristband, quadcopter, hexacopter, octocopter, and smart glasses. Other briefs use a mounting plate or enclosure with matching catalog components. These assemblies require no 3D-generation API key. Use the existing Export menu to download the assembly as GLB or other supported formats. Arbitrary custom object meshes are not currently generated.
 
 The **Research** tab in the studio shows the research swarm from port 8000. **Engineer PCB** on a finished research run sends the brief and the selected parts to the PCB studio, which generates a board for them. Set `GEMINI_API_KEY` (or `GEMINI_API_KEY_FILE`) before `npm run dev` to enable board generation. Lean proofs need `elan`; see `pcb-studio/verify/README.md`.
 

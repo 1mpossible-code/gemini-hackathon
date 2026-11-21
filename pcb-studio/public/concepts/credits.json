@@ -1,0 +1,443 @@
+[
+  {
+    "slug": "drone",
+    "label": "Drone",
+    "bytes": 495360,
+    "source": "https://sketchfab.com/3d-models/5f6f9115d1ae4d5c994fb348eb8e70aa",
+    "title": "UAV(unmanned Aerial Vehicle)",
+    "author": "3d.xyz",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "coffee-machine",
+    "label": "Coffee machine",
+    "bytes": 1177016,
+    "source": "https://sketchfab.com/3d-models/f01ef223980444678ff4ebdb6783085e",
+    "title": null,
+    "author": null,
+    "license": null
+  },
+  {
+    "slug": "kettle",
+    "label": "Kettle",
+    "bytes": 850732,
+    "source": "https://sketchfab.com/3d-models/ef4bc2b9b457445188f619a7befedfcc",
+    "title": "Sun, 15 Sep 2019 18:19:05",
+    "author": "newfields-3dprinting",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "toaster",
+    "label": "Toaster",
+    "bytes": 2302796,
+    "source": "https://sketchfab.com/3d-models/0dd620043178479db6752ab103b1e04e",
+    "title": "Toaster",
+    "author": "Artem P",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "microwave",
+    "label": "Microwave oven",
+    "bytes": 1673248,
+    "source": "https://sketchfab.com/3d-models/6e4cc39012504c99b7841314f2218e0e",
+    "title": "Microwave [XYZ School Homework]",
+    "author": "Maria Savelyeva",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "food-processor",
+    "label": "Food processor",
+    "bytes": 1268680,
+    "source": "https://sketchfab.com/3d-models/b7755e81af3f400d910e67050eddfe2a",
+    "title": "Philps Walita Problend 4 - duplicated version",
+    "author": "codezone3D",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "smartwatch",
+    "label": "Watch",
+    "bytes": 1833944,
+    "source": "https://sketchfab.com/3d-models/8b9a51da0dd94659ba1f606a2a67b2b8",
+    "title": "Reloj Joel",
+    "author": "davidlink",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "alarm-clock",
+    "label": "Alarm clock",
+    "bytes": 1892540,
+    "source": "https://sketchfab.com/3d-models/f4ff238459a34795a088e3cd4ceb762a",
+    "title": "Fotogrametri\u0301a Reloj",
+    "author": "laripreibisch",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "timer",
+    "label": "Timer",
+    "bytes": 3777036,
+    "source": "https://sketchfab.com/3d-models/2d4d77ac85604a1ab61b934b19d301c8",
+    "title": "Stopwatch",
+    "author": "nia_gamesty",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "thermostat",
+    "label": "Thermostat",
+    "bytes": 2851824,
+    "source": "https://sketchfab.com/3d-models/cd5b9f6a5c244bf784036d5067291bf7",
+    "title": "Elektrotermija 2",
+    "author": "metalgroup",
+    "license": "CC Attribution-NonCommercial"
+  },
+  {
+    "slug": "smoke-alarm",
+    "label": "Smoke alarm",
+    "bytes": 2852280,
+    "source": "https://sketchfab.com/3d-models/1175441e0d6c4b71a1c066916c8cb63b",
+    "title": "Fire Alarm",
+    "author": "gamingpuma",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "lock",
+    "label": "Smart lock",
+    "bytes": 2702532,
+    "source": "https://sketchfab.com/3d-models/9ef08d88f2ae48298659d1076ef662bf",
+    "title": "Steel Lock",
+    "author": "rautkrutant055",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "webcam",
+    "label": "Camcorder",
+    "bytes": 2966244,
+    "source": "https://sketchfab.com/3d-models/c3946d1fb2854361bc7ee42ee4ee9590",
+    "title": "Aparat fot. Canon Eos 350D z lamp\u0105 b\u0142yskow\u0105",
+    "author": "Fundacja Collect",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "camera",
+    "label": "Camera",
+    "bytes": 2260924,
+    "source": "https://sketchfab.com/3d-models/543d585a3b744ec1a3d82b3ac0d2473e",
+    "title": "Canon Camera",
+    "author": "atypotopyta",
+    "license": null
+  },
+  {
+    "slug": "laptop",
+    "label": "Laptop",
+    "bytes": 2669968,
+    "source": "https://sketchfab.com/3d-models/104e91f52e174ea6a249d2dd21facfc0",
+    "title": "Beluga's Computer",
+    "author": "realism",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "keyboard",
+    "label": "Keyboard",
+    "bytes": 805656,
+    "source": "https://sketchfab.com/3d-models/8537a184f2d441aebd214689c0cd918a",
+    "title": "TECLADO",
+    "author": "Fundasoft",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "mouse",
+    "label": "Mouse",
+    "bytes": 2177980,
+    "source": "https://sketchfab.com/3d-models/5847669dfe3d4ba8b59e69dc64bc09c1",
+    "title": "Gaming Mouse",
+    "author": "attix84work",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "printer",
+    "label": "Printer",
+    "bytes": 502792,
+    "source": "https://sketchfab.com/3d-models/73622641d52648df8bdef5da81f6f4bc",
+    "title": "TestLab-2021-01",
+    "author": "siggitec",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "projector",
+    "label": "Projector",
+    "bytes": 66628,
+    "source": "https://sketchfab.com/3d-models/e14a2b9336df47a6b536a3a1cf829221",
+    "title": "Video projector",
+    "author": "1-3D.com",
+    "license": "CC Attribution-ShareAlike"
+  },
+  {
+    "slug": "router",
+    "label": "Router",
+    "bytes": 1358572,
+    "source": "https://sketchfab.com/3d-models/35cf2964b5334e4db53649084137d477",
+    "title": "Zed B Bbb",
+    "author": "aleksandar1",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "headphones",
+    "label": "Headphones",
+    "bytes": 2488120,
+    "source": "https://sketchfab.com/3d-models/05ffe73cf5b946b89ce81ed1a422125f",
+    "title": "Pea Headset",
+    "author": "321Blender",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "earbuds",
+    "label": "Earbuds",
+    "bytes": 2855116,
+    "source": "https://sketchfab.com/3d-models/f17bf70bfd114a8aae0447bded2683f8",
+    "title": "AURICULARES MARSHALL",
+    "author": "38 grados",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "record-player",
+    "label": "Record player",
+    "bytes": 2808264,
+    "source": "https://sketchfab.com/3d-models/66abd679b8934298ba8af35db56d8106",
+    "title": "HDD",
+    "author": "Nadya Sarieva",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "radio",
+    "label": "Radio",
+    "bytes": 2787364,
+    "source": "https://sketchfab.com/3d-models/f853a0af65d34699a1f3e202aba0400f",
+    "title": "1930'S Radio",
+    "author": "Niamh_",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "amplifier",
+    "label": "Amplifier",
+    "bytes": 339748,
+    "source": "https://sketchfab.com/3d-models/b39c78a6a2ce4ff3805c4c1c7f165919",
+    "title": "Amp",
+    "author": "Bobby Cairns",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "speaker",
+    "label": "Speaker",
+    "bytes": 1811368,
+    "source": "https://sketchfab.com/3d-models/227c0e5245e24f46b700339707c2410e",
+    "title": "Box and Box",
+    "author": "David Devos",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "synth",
+    "label": "Keyboard instrument",
+    "bytes": 2824820,
+    "source": "https://sketchfab.com/3d-models/f1aa479977a74a608d362679ed5ca721",
+    "title": "Saloon - Piano",
+    "author": "Adrian H.",
+    "license": "CC Attribution-NonCommercial"
+  },
+  {
+    "slug": "guitar",
+    "label": "Guitar",
+    "bytes": 2639340,
+    "source": "https://sketchfab.com/3d-models/d401ca5456a24c2db734a1deb04f931a",
+    "title": "mandolin",
+    "author": "LaFork",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "phone",
+    "label": "Phone",
+    "bytes": 1638020,
+    "source": "https://sketchfab.com/3d-models/9783d77d4f2449feb27f9dc2d53a9727",
+    "title": "PCT phone",
+    "author": "dogdoy",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "remote",
+    "label": "Remote control",
+    "bytes": 1979736,
+    "source": "https://sketchfab.com/3d-models/bd51773c52e54812a88c38c14935ae98",
+    "title": "Apple TV Remote",
+    "author": "holelho",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "gamepad",
+    "label": "Game controller",
+    "bytes": 2761984,
+    "source": "https://sketchfab.com/3d-models/21aad0b30c7b4da0bcacb470ba73b0fe"
+  },
+  {
+    "slug": "calculator",
+    "label": "Calculator",
+    "bytes": 2484056,
+    "source": "https://sketchfab.com/3d-models/7547b73ba9e54c4d89bfa47ba5d6f23f",
+    "title": "Calculator",
+    "author": "black_stone",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "tv",
+    "label": "Display",
+    "bytes": 2914792,
+    "source": "https://sketchfab.com/3d-models/6bf3705b7a54411785d50ec81a3b9b9e",
+    "title": "Old TV",
+    "author": "SIUWAI",
+    "license": "CC Attribution-NonCommercial-ShareAlike"
+  },
+  {
+    "slug": "vacuum",
+    "label": "Vacuum cleaner",
+    "bytes": 1283144,
+    "source": "https://sketchfab.com/3d-models/ff52b849a1c84e7d89a9319977a6cdbc",
+    "title": "Vacuum Cleaner",
+    "author": "Rescue3D Assets",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "washer",
+    "label": "Washing machine",
+    "bytes": 56260,
+    "source": "https://sketchfab.com/3d-models/e92a3df021e84de2a67443d2ad4af9d9",
+    "title": "Washer dryer",
+    "author": "1-3D.com",
+    "license": "CC Attribution-ShareAlike"
+  },
+  {
+    "slug": "fridge",
+    "label": "Refrigerator",
+    "bytes": 2264240,
+    "source": "https://sketchfab.com/3d-models/55325e3b09ac48b2ae3803bccf804741",
+    "title": "\"Mi\u0144sk\" Fridge",
+    "author": "Michalina \"Miszla\" G\u0105sienica-Laskowy",
+    "license": "CC Attribution-NonCommercial-ShareAlike"
+  },
+  {
+    "slug": "air-conditioner",
+    "label": "Air conditioner",
+    "bytes": 2132508,
+    "source": "https://sketchfab.com/3d-models/02f13c9007ae4d5ab6c861f26341f441",
+    "title": "Air Conditioning",
+    "author": "eduardojose25",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "heater",
+    "label": "Heater",
+    "bytes": 2854184,
+    "source": "https://sketchfab.com/3d-models/48d9517b6c8f49d0aa4588f1d4d616fb",
+    "title": "Toyotomi heater",
+    "author": "Jerez Felipe",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "fan",
+    "label": "Fan",
+    "bytes": 2418896,
+    "source": "https://sketchfab.com/3d-models/b8fed189a84741a0827b1006ba003a94",
+    "title": "propeller 2",
+    "author": "cleisonrodrigues",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "lightbulb",
+    "label": "Light bulb",
+    "bytes": 2614168,
+    "source": "https://sketchfab.com/3d-models/2b358bd708c04b5c978e35f75f63d2b9",
+    "title": "Bombilla LED",
+    "author": "MakerSTEAM",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "lamp",
+    "label": "Lamp",
+    "bytes": 852868,
+    "source": "https://sketchfab.com/3d-models/acfd453ccb254fec87cae82046251009",
+    "title": "Mantra _3868",
+    "author": "Lu.ru",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "flashlight",
+    "label": "Flashlight",
+    "bytes": 2888352,
+    "source": "https://sketchfab.com/3d-models/85812bc38c3d410f9d75339df78f8051",
+    "title": "Nitecore MH12 flashlight",
+    "author": "Practical Creations",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "vending-machine",
+    "label": "Vending machine",
+    "bytes": 1742220,
+    "source": "https://sketchfab.com/3d-models/5946f63acb3d4113bcc6d87febe30fdb"
+  },
+  {
+    "slug": "traffic-light",
+    "label": "Traffic light",
+    "bytes": 3854904,
+    "source": "https://sketchfab.com/3d-models/9fc58f987ce7439eafcecc22fe44f4bd",
+    "title": "TrafficLight",
+    "author": "businessyuen",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "helicopter",
+    "label": "Helicopter",
+    "bytes": 2338492,
+    "source": "https://sketchfab.com/3d-models/8b611680277044e1918e7880098f75e9",
+    "title": "Toy Helicopter",
+    "author": "walter.noelia",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "airplane",
+    "label": "Airplane",
+    "bytes": 2776680,
+    "source": "https://sketchfab.com/3d-models/171922b2761a46a0a4fe2c94ed894484",
+    "title": "A 10 THUNDERBOLT MK2",
+    "author": "Firebird_1",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "rocket",
+    "label": "Rocket",
+    "bytes": 2034080,
+    "source": "https://sketchfab.com/3d-models/e32d1862e0294f90bb645bb81719cde1",
+    "title": "Guerra0406 Rocket Frame",
+    "author": "318982",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "scooter",
+    "label": "Scooter",
+    "bytes": 1449524,
+    "source": "https://sketchfab.com/3d-models/8903ce6965504b1c831c2eb3a5e2c151"
+  },
+  {
+    "slug": "bicycle",
+    "label": "Bicycle",
+    "bytes": 1374384,
+    "source": "https://sketchfab.com/3d-models/692d4d1536f647acb6c7f652a99ecca7",
+    "title": "family bike",
+    "author": "kreems",
+    "license": "CC Attribution"
+  },
+  {
+    "slug": "skateboard",
+    "label": "Skateboard",
+    "bytes": 2696152,
+    "source": "https://sketchfab.com/3d-models/2a8d375f2aef42259c6b6814a3ab72a6",
+    "title": "Longboard",
+    "author": "el_oreoman",
+    "license": "CC Attribution"
+  }
+]

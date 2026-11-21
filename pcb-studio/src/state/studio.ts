@@ -1,6 +1,7 @@
 import { useSyncExternalStore } from 'react'
 import { board as defaultBoard, type Board } from '@/data/board'
 import { defaultSystem, systemFromPrompt, type SystemDesign } from '@/data/system'
+import { findConcept } from '@/data/concepts'
 import type { Verification } from '@/verify/types'
 import type { OfferMatchKind, ShopOffer, ShopSearchEntry } from '@/data/shop'
 
@@ -20,9 +21,7 @@ export interface StudioState {
   scale: Scale // 'system' = whole assembly, 'board' = the custom PCB
   mode: 'research' | 'engineer' // research swarm (friend's FastAPI app) or the PCB studio
   pendingPrompt: string | null // board brief waiting for the Gemini prompt bar to run
-  conceptUrl: string | null
-  conceptStatus: string
-  conceptError: string | null
+  concept: { label: string; url: string } | null // bundled whole-object model for the brief
   system: SystemDesign
   device: string | null // selected system device id
   hoveredDevice: string | null
@@ -80,13 +79,16 @@ export function computeBoardBomCost(
   return { totalUsd: +total.toFixed(4), unpricedCount: unpriced }
 }
 
+// The mode survives a reload, so a dev-server restart does not drop you back to research.
+function savedMode(): string | null {
+  try { return sessionStorage.getItem('forge.mode') } catch { return null }
+}
+
 let state: StudioState = {
   scale: new URLSearchParams(location.search).get('scale') === 'board' ? 'board' : 'system',
-  mode: new URLSearchParams(location.search).get('mode') === 'engineer' || new URLSearchParams(location.search).has('brief') ? 'engineer' : 'research',
+  mode: new URLSearchParams(location.search).get('mode') === 'engineer' || new URLSearchParams(location.search).has('brief') || savedMode() === 'engineer' ? 'engineer' : 'research',
   pendingPrompt: briefFromUrl(),
-  conceptUrl: null,
-  conceptStatus: '',
-  conceptError: null,
+  concept: briefFromUrl() ? findConcept(briefFromUrl()!) : null,
   system: briefFromUrl() ? systemFromPrompt(briefFromUrl()!) : defaultSystem,
   device: null,
   hoveredDevice: null,
@@ -115,6 +117,7 @@ const listeners = new Set<() => void>()
 
 export function setStudio(patch: Partial<StudioState> | ((s: StudioState) => Partial<StudioState>)) {
   const next = typeof patch === 'function' ? patch(state) : patch
+  if (next.mode && next.mode !== state.mode) { try { sessionStorage.setItem('forge.mode', next.mode) } catch { /* storage blocked */ } }
   state = { ...state, ...next }
   listeners.forEach((l) => l())
 }
@@ -195,4 +198,3 @@ export function goScale(scale: Scale) {
   if (scale === 'board') window.dispatchEvent(new Event('forge:dive'))
   else window.dispatchEvent(new CustomEvent('forge:scale', { detail: 'system' }))
 }
-
