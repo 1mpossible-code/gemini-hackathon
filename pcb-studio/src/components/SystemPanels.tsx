@@ -18,6 +18,7 @@ const usd = (n: number) => `$${n.toFixed(2)}`
 /** Ask for a scale change; the 3D views animate the camera, the veil swaps the scene. */
 export function goScale(scale: Scale) {
   const s = getStudio()
+  if (s.mode !== 'engineer') return setStudio({ mode: 'engineer', scale })
   if (s.scale === scale) return
   if (scale === 'board') window.dispatchEvent(new Event('forge:dive'))
   else window.dispatchEvent(new CustomEvent('forge:scale', { detail: 'system' }))
@@ -25,16 +26,19 @@ export function goScale(scale: Scale) {
 
 export function ScaleSwitch() {
   const scale = useStudio((s) => s.scale)
-  const opts: { id: Scale; label: string }[] = [
+  const mode = useStudio((s) => s.mode)
+  const opts: { id: Scale | 'research'; label: string }[] = [
+    { id: 'research', label: 'Research' },
     { id: 'system', label: 'System' },
     { id: 'board', label: 'Board' },
   ]
+  const active = mode === 'research' ? 'research' : scale
   return (
     <div className="relative flex rounded-lg border border-border bg-secondary/60 p-0.5">
       {opts.map((o) => (
-        <button key={o.id} onClick={() => goScale(o.id)} className="label-mono relative px-3 py-1 !text-[10px]">
-          {scale === o.id && <motion.span layoutId="scale-pill" transition={{ duration: 0.4, ease }} className="absolute inset-0 rounded-md bg-foreground" />}
-          <span className={cn('relative', scale === o.id ? 'text-background' : 'text-muted-foreground')}>{o.label}</span>
+        <button key={o.id} onClick={() => (o.id === 'research' ? setStudio({ mode: 'research' }) : goScale(o.id))} className="label-mono relative px-3 py-1 !text-[10px]">
+          {active === o.id && <motion.span layoutId="scale-pill" transition={{ duration: 0.4, ease }} className="absolute inset-0 rounded-md bg-foreground" />}
+          <span className={cn('relative', active === o.id ? 'text-background' : 'text-muted-foreground')}>{o.label}</span>
         </button>
       ))}
     </div>

@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Tip, TooltipProvider } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { ResearchPane } from '@/components/Research'
 import { ScaleSwitch, ScaleTransition, SystemInspector, SystemLibrary, goScale } from '@/components/SystemPanels'
 import { systemCost } from '@/data/system'
 
@@ -228,14 +229,23 @@ function Prompt() {
   const [busy, setBusy] = useState(false)
   const [log, setLog] = useState<GenLog[]>([])
   const [error, setError] = useState<string | null>(null)
-  const run = async () => {
-    if (!text.trim() || busy) return
+  const pending = useStudio((s) => s.pendingPrompt)
+  useEffect(() => {
+    if (!pending || busy) return
+    setStudio({ pendingPrompt: null })
+    setText(pending)
+    run(pending)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pending])
+  const run = async (override?: string) => {
+    const text_ = override ?? text
+    if (!text_.trim() || busy) return
     setBusy(true); setError(null); setLog([])
     try {
       const loader = aiModules['./ai/generate.ts']
       if (!loader) throw new Error('Generation service not installed')
       const mod = (await loader()) as { generateBoard: (p: string, on: (e: { type: string; stage?: string; message?: string }) => void) => Promise<Board> }
-      const board = await mod.generateBoard(text, (e) => {
+      const board = await mod.generateBoard(text_, (e) => {
         if (e.type === 'stage') setLog((l) => [...l.slice(-5), { stage: e.stage ?? '', message: e.message ?? '' }])
       })
       setStudio({ board, selected: null, exploded: false, touring: true, verification: { status: 'idle', theorems: [] } })
@@ -474,6 +484,7 @@ function StatusBar() {
 
 export default function App() {
   const scale = useStudio((s) => s.scale)
+  const mode = useStudio((s) => s.mode)
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement).tagName === 'INPUT') return
@@ -490,7 +501,9 @@ export default function App() {
     <TooltipProvider delayDuration={250}>
       <div className="flex h-dvh flex-col bg-background text-foreground">
         <TopBar />
-        <div className="flex min-h-0 flex-1">
+        <div className="relative flex min-h-0 flex-1">
+          <ResearchPane />
+          {mode === 'engineer' && (<>
           {scale === 'system' ? <SystemLibrary /> : <Library />}
           <motion.main
             initial={{ opacity: 0 }}
@@ -504,6 +517,7 @@ export default function App() {
             <ScaleTransition />
           </motion.main>
           {scale === 'system' ? <SystemInspector /> : <Inspector />}
+          </>)}
         </div>
         <StatusBar />
       </div>

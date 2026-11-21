@@ -8,6 +8,8 @@ export type ExportFormat = 'stl' | 'glb' | 'obj' | 'png' | 'json'
 
 export interface StudioState {
   scale: Scale // 'system' = whole assembly, 'board' = the custom PCB
+  mode: 'research' | 'engineer' // research swarm (friend's FastAPI app) or the PCB studio
+  pendingPrompt: string | null // board brief waiting for the Gemini prompt bar to run
   system: SystemDesign
   device: string | null // selected system device id
   hoveredDevice: string | null
@@ -26,8 +28,18 @@ export interface StudioState {
   exportRequest: { format: ExportFormat; nonce: number } | null
 }
 
+function briefFromUrl(): string | null {
+  const q = new URLSearchParams(location.search)
+  const brief = q.get('brief')
+  if (!brief) return null
+  const parts = q.get('parts')
+  return parts ? `${brief} Build it around: ${parts}.` : brief
+}
+
 let state: StudioState = {
-  scale: new URLSearchParams(location.search).get('scale') === 'board' ? 'board' : 'system',
+  scale: new URLSearchParams(location.search).get('scale') === 'board' || new URLSearchParams(location.search).has('brief') ? 'board' : 'system',
+  mode: new URLSearchParams(location.search).get('mode') === 'research' ? 'research' : 'engineer',
+  pendingPrompt: briefFromUrl(),
   system: defaultSystem,
   device: null,
   hoveredDevice: null,

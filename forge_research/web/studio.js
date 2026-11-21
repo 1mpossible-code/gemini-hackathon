@@ -130,6 +130,7 @@ async function startResearch(mode) {
   showFeedback("");
   researchController = new AbortController();
   $("#open-workbench-btn").hidden = true;
+  $("#engineer-pcb-btn").hidden = true;
   showResearchScreen();
   showResearchMap(mode, mode === "sample" ? sampleBrief : value);
 
@@ -142,6 +143,9 @@ async function startResearch(mode) {
     );
     latestCompletedReport = report;
     finishResearchMap("completed");
+    const canEngineer = !!(report.review?.selected_parts || []).length;
+    $("#engineer-pcb-btn").hidden = !canEngineer;
+    $("#btn-engineer-pcb").hidden = !canEngineer;
     if (report.project) {
       $("#open-workbench-btn").hidden = false;
       await loadProjectIntoWorkbench(report.project, report);
@@ -163,6 +167,28 @@ async function startResearch(mode) {
     setBusy(false, mode);
   }
 }
+
+// Hand the finished research run to the PCB studio, which generates a board for it.
+// Inside the studio's Research tab this posts to the parent window; standalone it
+// opens the studio (FORGE_PCB_URL, default the Vite dev server).
+function engineerPcb() {
+  const report = latestCompletedReport;
+  if (!report) return;
+  const parts = (report.review?.selected_parts || []).map(p => ({
+    id: p.id, role: p.role, name: p.name, manufacturer: p.manufacturer, sku: p.sku,
+  }));
+  const message = { type: "forge:engineer", brief: report.brief, parts };
+  if (window.parent !== window) {
+    window.parent.postMessage(message, "*");
+  } else {
+    const url = new URL(window.FORGE_PCB_URL || "http://127.0.0.1:5173/");
+    url.searchParams.set("brief", report.brief);
+    url.searchParams.set("parts", parts.map(p => p.name).join(", "));
+    window.open(url, "_blank", "noopener");
+  }
+}
+$("#engineer-pcb-btn").addEventListener("click", engineerPcb);
+$("#btn-engineer-pcb").addEventListener("click", engineerPcb);
 
 $("#brand-home").addEventListener("click", e => {
   e.preventDefault();

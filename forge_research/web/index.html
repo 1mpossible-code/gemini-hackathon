@@ -91,6 +91,7 @@
           <svg aria-hidden="true"><use href="#download"/></svg><span>JSON</span>
         </button>
         <a id="btn-export-glb" class="bar-btn" download="forge-assembly.glb" title="Download 3D assembly as GLB">GLB</a>
+        <button type="button" id="btn-engineer-pcb" class="bar-btn" title="Generate a PCB for this design in the PCB studio" hidden>Engineer PCB</button>
         <button type="button" id="btn-new-brief" class="bar-btn subtle-btn">New Brief</button>
       </div>
     </div>
@@ -161,6 +162,9 @@
         <div class="research-actions">
           <button id="stop-research" class="example" type="button" hidden>Stop run</button>
           <button id="edit-brief" class="example" type="button" hidden>Edit brief</button>
+          <button id="engineer-pcb-btn" class="example" type="button" hidden>
+            Engineer PCB <svg aria-hidden="true"><use href="#arrow"/></svg>
+          </button>
           <button id="open-workbench-btn" class="primary" type="button" hidden>
             Open Engineering Studio <svg aria-hidden="true"><use href="#arrow"/></svg>
           </button>
