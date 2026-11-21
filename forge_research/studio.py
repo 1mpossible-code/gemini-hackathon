@@ -1,4 +1,6 @@
-"""Local web entry point for the FORGE research harness."""
+"""Local web entry point for the FORGE Interactive Engineering Studio."""
+
+from __future__ import annotations
 
 import asyncio
 import json
@@ -6,20 +8,21 @@ import logging
 import os
 from collections import OrderedDict
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Response
+from fastapi import FastAPI, HTTPException, Query, Response
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from google.adk.agents.invocation_context import LlmCallsLimitExceededError
 from google.genai.errors import APIError
 from pydantic import BaseModel, Field, ValidationError
 
-from .catalog import ResearchError
+from .bom import compute_cost_breakdown, format_minor_currency
+from .catalog import PARTS, ResearchError
 from .geometry import (
     AssemblyManifest,
     AssemblyParameters,
@@ -27,8 +30,37 @@ from .geometry import (
     build_assembly,
     export_glb,
 )
-from .models import Part, Requirements, ResearchReport
+from .models import (
+    ActivityEntry,
+    DeviceSpecification,
+    ProcurementState,
+    ResearchReport,
+    RevisionDiff,
+    VerificationReport,
+)
 from .offline import DEMO_BRIEF, DemoModel
+from .procurement import (
+    ShopMcpError,
+    get_shop_product,
+    search_part_offers,
+)
+from .project import (
+    DesignEdit,
+    ManagedProject,
+    ProjectView,
+    RevisionRecord,
+    apply_design_edit_to_spec,
+    build_project_view,
+    compute_revision_diff,
+    evaluate_and_commit_revision,
+    initial_spec_from_report,
+)
+from .repair import (
+    apply_repair_patch,
+    choose_repair_model,
+    propose_repair_patch,
+)
+from .verify import find_lean_binary, verify_design, verify_design_sync
 from .workflow import Progress, run_research, stage_event
 
 WEB = Path(__file__).with_name("web")
@@ -42,15 +74,6 @@ class ResearchRequest(BaseModel):
     brief: str = Field(default="", max_length=4000)
 
 
-class DeviceSpecification(BaseModel):
-    """Versioned requirements, part instances, and editable assembly parameters."""
-
-    schema_version: Literal[1] = 1
-    requirements: Requirements
-    parts_by_instance: dict[str, Part]
-    mechanical: AssemblyParameters
-
-
 class Prototype(BaseModel):
     project_id: UUID
     revision: int
@@ -62,6 +85,7 @@ class Prototype(BaseModel):
 class StudioReport(ResearchReport):
     prototype: Prototype | None = None
     prototype_error: str | None = None
+    project: ProjectView | None = None
 
 
 class AssemblyEdit(BaseModel):
@@ -69,14 +93,64 @@ class AssemblyEdit(BaseModel):
     wrist_circumference_mm: float = Field(allow_inf_nan=False)
 
 
-@dataclass(frozen=True)
-class PrototypeProject:
-    report: ResearchReport
-    prototype: Prototype
-    glb: bytes
+class RestoreRequest(BaseModel):
+    base_revision: int = Field(ge=1)
+    target_revision: int = Field(ge=1)
 
 
-projects: OrderedDict[UUID, PrototypeProject] = OrderedDict()
+class RepairRequest(BaseModel):
+    base_revision: int = Field(ge=1)
+    mode: Literal["live", "sample"] = "live"
+
+
+class RepairResponse(BaseModel):
+    repaired: bool
+    attempts: int
+    actor: Literal["gemini", "offline_fixture"]
+    rationale: str
+    diff: RevisionDiff | None = None
+    project: ProjectView
+
+
+class ProcurementSearchRequest(BaseModel):
+    catalog_id: str | None = None
+    query: str | None = Field(default=None, max_length=200)
+    country: str = Field(default="US", min_length=2, max_length=2)
+    currency: str = Field(default="USD", min_length=3, max_length=3)
+
+
+class ProductInspectRequest(BaseModel):
+    product_id: str = Field(min_length=1, max_length=300)
+    country: str = Field(default="US", min_length=2, max_length=2)
+    currency: str = Field(default="USD", min_length=3, max_length=3)
+
+
+class OfferSelectionRequest(BaseModel):
+    base_revision: int = Field(ge=1)
+    instance_id: str
+    offer_id: str | None = None
+
+
+projects: OrderedDict[UUID, ManagedProject] = OrderedDict()
+_project_locks: dict[UUID, asyncio.Lock] = {}
+
+
+def _lock_for(project_id: UUID) -> asyncio.Lock:
+    if project_id not in _project_locks:
+        _project_locks[project_id] = asyncio.Lock()
+    return _project_locks[project_id]
+
+
+def _make_prototype(project: ManagedProject) -> Prototype:
+    curr = project.current
+    assert curr.manifest is not None
+    return Prototype(
+        project_id=project.project_id,
+        revision=curr.revision,
+        device_spec=curr.spec,
+        manifest=curr.manifest,
+        glb_url=f"/api/prototypes/{project.project_id}/model.glb?revision={curr.revision}",
+    )
 
 
 def publish_prototype(
@@ -87,14 +161,7 @@ def publish_prototype(
     *,
     progress: Progress | None = None,
 ) -> Prototype:
-    specification = DeviceSpecification(
-        requirements=report.requirements,
-        parts_by_instance={
-            ("board" if part.role == "controller" else "sensor-1"): part
-            for part in report.review.selected_parts
-        },
-        mechanical=parameters if parameters is not None else AssemblyParameters(),
-    )
+    specification, snapshot = initial_spec_from_report(report, parameters)
     if progress is not None:
         progress(
             stage_event("geometry", "running", detail="Generating the parametric assembly.")
@@ -130,29 +197,144 @@ def publish_prototype(
         if progress is not None:
             progress(stage_event("export", "failed", detail=str(error)))
         raise
-    prototype = Prototype(
-        project_id=project_id,
-        revision=revision,
-        device_spec=specification,
-        manifest=manifest,
-        glb_url=f"/api/prototypes/{project_id}/model.glb?revision={revision}",
+
+    now = datetime.now(UTC)
+    existing = projects.get(project_id)
+    prev_spec = existing.current.spec if existing is not None else None
+    prev_cost = existing.current.cost if existing is not None else None
+    procurement = existing.procurement if existing is not None else ProcurementState(revision=revision)
+    procurement.revision = revision
+
+    cost = compute_cost_breakdown(
+        revision,
+        specification,
+        snapshot,
+        procurement=procurement,
+        previous_spec=prev_spec,
+        previous_cost=prev_cost,
     )
-    projects[project_id] = PrototypeProject(report, prototype, glb)
+    if existing is not None and prev_spec is not None and prev_spec.wiring == specification.wiring and prev_spec.requirements == specification.requirements:
+        verification: VerificationReport = existing.current.verification.model_copy(
+            deep=True, update={"revision": revision}
+        )
+    else:
+        if progress is not None:
+            progress({"type": "verification", "status": "running", "detail": "Checking formal obligations in Lean 4."})
+        verification = verify_design_sync(revision, specification, snapshot, cost)
+        if progress is not None:
+            progress(
+                {
+                    "type": "verification",
+                    "status": "completed",
+                    "data": {
+                        "status": verification.status,
+                        "verified_count": verification.verified_count,
+                        "failed_count": verification.failed_count,
+                        "unverified_count": verification.unverified_count,
+                    },
+                }
+            )
+
+    record = RevisionRecord(
+        revision=revision,
+        parent_revision=(revision - 1) if existing is not None else None,
+        label="Initial researched design" if existing is None else f"Wrist updated to {manifest.parameters.wrist_circumference_mm:g} mm",
+        created_at=now,
+        spec=specification,
+        manifest=manifest,
+        glb=glb,
+        geometry_source_revision=revision,
+        geometry_error=None,
+        cost=cost,
+        verification=verification,
+    )
+
+    if existing is None:
+        actor_mode = "offline_fixture" if report.mode == "offline" else "gemini"
+        activity = [
+            ActivityEntry(
+                timestamp=now,
+                revision=1,
+                actor=actor_mode,
+                kind="research_completed",
+                title=f"Research completed ({'Offline fixture' if report.mode == 'offline' else report.model})",
+                detail=report.proposal.rationale,
+                status="pass",
+            ),
+            ActivityEntry(
+                timestamp=now,
+                revision=1,
+                actor="lean",
+                kind="verification",
+                title=f"Lean 4 checked Rev 1 ({verification.status.upper()})",
+                detail=(
+                    f"{verification.verified_count} verified, {verification.failed_count} failed, "
+                    f"{verification.unverified_count} unverified."
+                ),
+                status="pass" if verification.failed_count == 0 else "fail",
+            ),
+            ActivityEntry(
+                timestamp=now,
+                revision=1,
+                actor="geometry",
+                kind="geometry_regenerated",
+                title="3D wristband assembly generated",
+                detail=(
+                    f"Wrist {manifest.parameters.wrist_circumference_mm:g} mm · "
+                    f"Envelope {manifest.envelope_mm} mm · {len(glb) // 1024} KiB GLB."
+                ),
+                status="pass",
+            ),
+        ]
+        managed = ManagedProject(
+            project_id=project_id,
+            report=report,
+            catalog_snapshot=snapshot,
+            current_revision=revision,
+            records={revision: record},
+            procurement=procurement,
+            activity=activity,
+        )
+        projects[project_id] = managed
+    else:
+        existing.records[revision] = record
+        existing.current_revision = revision
+        existing.activity.append(
+            ActivityEntry(
+                timestamp=now,
+                revision=revision,
+                actor="user",
+                kind="wrist_revised",
+                title=f"Rev {revision}: Wrist updated to {manifest.parameters.wrist_circumference_mm:g} mm",
+                detail="; ".join(cost.deltas_from_previous)
+                or f"Known BOM {format_minor_currency(cost.known_subtotal_usd_cents, 'USD')}",
+                status="pass",
+            )
+        )
+        managed = existing
+
     projects.move_to_end(project_id)
-    if len(projects) > 32:
-        projects.popitem(last=False)
+    while len(projects) > 32:
+        evicted_id, _ = projects.popitem(last=False)
+        _project_locks.pop(evicted_id, None)
+
     if progress is not None:
         progress(
             stage_event("export", "completed", data={"format": "GLB", "byte_count": len(glb)})
         )
-    return prototype
+    return _make_prototype(managed)
 
 
-def require_current_project(project_id: UUID, revision: int) -> PrototypeProject:
+def require_project_exists(project_id: UUID) -> ManagedProject:
     project = projects.get(project_id)
     if project is None:
         raise HTTPException(404, "This prototype expired. Run the brief again.")
-    if revision != project.prototype.revision:
+    return project
+
+
+def require_current_project(project_id: UUID, revision: int) -> ManagedProject:
+    project = require_project_exists(project_id)
+    if revision != project.current_revision:
         raise HTTPException(
             409, "This prototype changed. Reload your report before editing it."
         )
@@ -171,8 +353,20 @@ def home() -> FileResponse:
 
 
 @app.get("/api/session")
-def session() -> dict:
-    return {"live": configured_model() is not None, "sample_brief": DEMO_BRIEF}
+def session() -> dict[str, Any]:
+    model = configured_model()
+    return {
+        "live": model is not None,
+        "gemini_model": model,
+        "lean_available": find_lean_binary() is not None,
+        "shop_mcp_enabled": True,
+        "sample_brief": DEMO_BRIEF,
+    }
+
+
+@app.get("/api/catalog")
+def catalog() -> dict[str, Any]:
+    return {"parts": [part.model_dump(mode="json") for part in PARTS]}
 
 
 @app.post("/api/research")
@@ -197,6 +391,8 @@ async def run_studio_research(
                     503,
                     "Live research needs Gemini configured on the server. You can run the offline sample.",
                 )
+            os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = "false"
+            os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "false"
             report = await run_research(request.brief, model, mode="gemini", progress=progress)
     except ResearchError as error:
         raise HTTPException(
@@ -221,8 +417,10 @@ async def run_studio_research(
 
     result = StudioReport(**report.model_dump())
     if report.review.status == "candidate":
+        pid = uuid4()
         try:
-            result.prototype = publish_prototype(report, uuid4(), 1, progress=progress)
+            result.prototype = publish_prototype(report, pid, 1, progress=progress)
+            result.project = build_project_view(projects[pid])
         except GeometryError as error:
             result.prototype_error = str(error)
     elif progress is not None:
@@ -288,27 +486,392 @@ async def stream_research(request: ResearchRequest) -> StreamingResponse:
 @app.get("/api/prototypes/{project_id}/model.glb")
 async def get_model(project_id: UUID, revision: int) -> Response:
     project = require_current_project(project_id, revision)
+    if not project.glb:
+        raise HTTPException(404, "No 3D model is available for this revision.")
     return Response(project.glb, media_type="model/gltf-binary")
 
 
 @app.post("/api/prototypes/{project_id}/revisions")
 async def revise_prototype(project_id: UUID, edit: AssemblyEdit) -> Prototype:
-    project = require_current_project(project_id, edit.base_revision)
-    previous = project.prototype.device_spec.mechanical
+    async with _lock_for(project_id):
+        project = require_current_project(project_id, edit.base_revision)
+        previous = project.current.spec.mechanical
+        try:
+            parameters = AssemblyParameters(
+                wrist_circumference_mm=edit.wrist_circumference_mm,
+                wall_mm=previous.wall_mm,
+                clearance_mm=previous.clearance_mm,
+            )
+            return publish_prototype(
+                project.report, project_id, edit.base_revision + 1, parameters
+            )
+        except (GeometryError, ValidationError) as error:
+            message = (
+                str(error)
+                if isinstance(error, GeometryError)
+                else "Enter a supported wrist size."
+            )
+            raise HTTPException(422, message) from error
+
+
+@app.get("/api/projects/{project_id}")
+async def get_project(project_id: UUID) -> ProjectView:
+    project = require_project_exists(project_id)
+    return build_project_view(project)
+
+
+@app.post("/api/projects/{project_id}/edits")
+async def edit_project(project_id: UUID, edit: DesignEdit) -> ProjectView:
+    async with _lock_for(project_id):
+        project = require_current_project(project_id, edit.base_revision)
+        try:
+            next_spec = apply_design_edit_to_spec(
+                project.current.spec, edit, project.catalog_snapshot
+            )
+        except (ValidationError, ValueError) as error:
+            raise HTTPException(422, str(error)) from error
+
+        changed_summary = _summarize_edit_label(project.current.spec, next_spec)
+        if not changed_summary:
+            return build_project_view(project)
+
+        await evaluate_and_commit_revision(
+            project, next_spec, label=changed_summary, actor="user"
+        )
+        return build_project_view(project)
+
+
+def _summarize_edit_label(prev: DeviceSpecification, curr: DeviceSpecification) -> str:
+    parts: list[str] = []
+    if prev.project_name != curr.project_name:
+        parts.append(f"Renamed to '{curr.project_name}'")
+    if prev.mechanical.wrist_circumference_mm != curr.mechanical.wrist_circumference_mm:
+        parts.append(f"Wrist {curr.mechanical.wrist_circumference_mm:g} mm")
+    if prev.mechanical.wall_mm != curr.mechanical.wall_mm:
+        parts.append(f"Wall {curr.mechanical.wall_mm:g} mm")
+    if prev.mechanical.clearance_mm != curr.mechanical.clearance_mm:
+        parts.append(f"Clearance {curr.mechanical.clearance_mm:g} mm")
+    if prev.requirements.budget_usd_cents != curr.requirements.budget_usd_cents or (
+        prev.requirements.budget_exclusive != curr.requirements.budget_exclusive
+    ):
+        cap = (
+            format_minor_currency(curr.requirements.budget_usd_cents, "USD")
+            if curr.requirements.budget_usd_cents is not None
+            else "no cap"
+        )
+        parts.append(f"Budget {'<' if curr.requirements.budget_exclusive else '≤'} {cap}")
+    if prev.requirements.transport != curr.requirements.transport:
+        parts.append(f"Transport {curr.requirements.transport.upper()}")
+    if prev.requirements.gestures != curr.requirements.gestures:
+        parts.append("Updated target gestures")
+    if prev.components != curr.components:
+        p_ctrl = next(c for c in prev.components if c.role == "controller")
+        c_ctrl = next(c for c in curr.components if c.role == "controller")
+        p_sens = next(c for c in prev.components if c.role == "emg_sensor")
+        c_sens = next(c for c in curr.components if c.role == "emg_sensor")
+        if p_ctrl.catalog_id != c_ctrl.catalog_id:
+            parts.append(f"Controller → {c_ctrl.catalog_id}")
+        if p_sens.catalog_id != c_sens.catalog_id:
+            parts.append(f"Sensor → {c_sens.catalog_id}")
+        if p_sens.quantity != c_sens.quantity:
+            parts.append(f"Sensor qty ×{c_sens.quantity}")
+    if prev.wiring != curr.wiring:
+        if prev.wiring.supply_rail_mv != curr.wiring.supply_rail_mv:
+            parts.append(f"Supply rail {curr.wiring.supply_rail_mv} mV")
+        if prev.wiring.signal_pins != curr.wiring.signal_pins:
+            parts.append(f"ADC pins {', '.join(curr.wiring.signal_pins)}")
+        if prev.wiring.status_led_pin != curr.wiring.status_led_pin:
+            parts.append(f"LED pin {curr.wiring.status_led_pin or 'none'}")
+    return ", ".join(parts)
+
+
+@app.post("/api/projects/{project_id}/restore")
+async def restore_revision(project_id: UUID, req: RestoreRequest) -> ProjectView:
+    async with _lock_for(project_id):
+        project = require_current_project(project_id, req.base_revision)
+        target = project.records.get(req.target_revision)
+        if target is None:
+            raise HTTPException(404, f"Revision {req.target_revision} is no longer in history.")
+        if req.target_revision == project.current_revision:
+            return build_project_view(project)
+        await evaluate_and_commit_revision(
+            project,
+            target.spec.model_copy(deep=True),
+            label=f"Restored Rev {req.target_revision}",
+            actor="user",
+            force_verify=True,
+        )
+        return build_project_view(project)
+
+
+@app.get("/api/projects/{project_id}/compare")
+async def compare_revisions(
+    project_id: UUID,
+    from_rev: int = Query(ge=1),
+    to_rev: int = Query(ge=1),
+) -> RevisionDiff:
+    project = require_project_exists(project_id)
+    rec_a = project.records.get(from_rev)
+    rec_b = project.records.get(to_rev)
+    if rec_a is None or rec_b is None:
+        raise HTTPException(404, "One or both requested revisions were not found.")
+    return compute_revision_diff(rec_a, rec_b)
+
+
+@app.post("/api/projects/{project_id}/repair")
+async def repair_project(project_id: UUID, req: RepairRequest) -> RepairResponse:
+    async with _lock_for(project_id):
+        project = require_current_project(project_id, req.base_revision)
+        curr_ver = project.current.verification
+        failed = [ob for ob in curr_ver.obligations if ob.status == "failed"]
+        if not failed:
+            return RepairResponse(
+                repaired=True,
+                attempts=0,
+                actor="gemini" if req.mode == "live" else "offline_fixture",
+                rationale="All checkable constraints already pass; no repair required.",
+                diff=None,
+                project=build_project_view(project),
+            )
+
+        gem_model = configured_model()
+        effective_mode: Literal["live", "sample"] = req.mode
+        if req.mode == "live" and gem_model is None:
+            raise HTTPException(
+                503,
+                "Live Gemini repair needs GEMINI_API_KEY and FORGE_GEMINI_MODEL configured. "
+                "Use Offline scripted repair to test locally.",
+            )
+        if effective_mode == "live":
+            os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = "false"
+            os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "false"
+
+        model, actor = choose_repair_model(effective_mode, gem_model)
+        start_record = project.current
+        working_spec = start_record.spec.model_copy(deep=True)
+        working_failed = failed
+        last_rationale = ""
+        attempts = 0
+
+        for attempt in range(1, 3):
+            attempts = attempt
+            try:
+                patch = await propose_repair_patch(
+                    working_spec, working_failed, project.catalog_snapshot, model
+                )
+            except ResearchError as exc:
+                raise HTTPException(502, str(exc)) from exc
+            except APIError as exc:
+                raise HTTPException(
+                    502, f"Gemini repair request failed (status {exc.code})."
+                ) from exc
+
+            last_rationale = patch.rationale
+            if not patch.resolvable:
+                project.activity.append(
+                    ActivityEntry(
+                        timestamp=datetime.now(UTC),
+                        revision=project.current_revision,
+                        actor=actor,
+                        kind="repair_unresolvable",
+                        title=f"Repair halted ({'Gemini' if actor == 'gemini' else 'Offline fixture'})",
+                        detail=patch.rationale,
+                        status="warn",
+                    )
+                )
+                return RepairResponse(
+                    repaired=False,
+                    attempts=attempts,
+                    actor=actor,
+                    rationale=patch.rationale,
+                    diff=None,
+                    project=build_project_view(project),
+                )
+
+            try:
+                candidate_spec = apply_repair_patch(
+                    working_spec, patch, project.catalog_snapshot
+                )
+            except (ResearchError, ValidationError, ValueError) as exc:
+                last_rationale = f"Rejected invalid repair patch: {exc}"
+                break
+
+            temp_cost = compute_cost_breakdown(
+                project.current_revision + 1,
+                candidate_spec,
+                project.catalog_snapshot,
+                procurement=project.procurement,
+            )
+            temp_ver = await verify_design(
+                project.current_revision + 1,
+                candidate_spec,
+                project.catalog_snapshot,
+                temp_cost,
+            )
+            working_spec = candidate_spec
+            working_failed = [ob for ob in temp_ver.obligations if ob.status == "failed"]
+            if not working_failed:
+                committed = await evaluate_and_commit_revision(
+                    project,
+                    candidate_spec,
+                    label=f"Auto-repaired ({'Gemini' if actor == 'gemini' else 'Offline fixture'})",
+                    actor=actor,
+                    force_verify=True,
+                )
+                project.activity.append(
+                    ActivityEntry(
+                        timestamp=datetime.now(UTC),
+                        revision=committed.revision,
+                        actor=actor,
+                        kind="repair_succeeded",
+                        title=f"Constraint repair verified in Lean 4 (attempt {attempts})",
+                        detail=patch.rationale,
+                        status="pass",
+                    )
+                )
+                diff = compute_revision_diff(start_record, committed)
+                return RepairResponse(
+                    repaired=True,
+                    attempts=attempts,
+                    actor=actor,
+                    rationale=patch.rationale,
+                    diff=diff,
+                    project=build_project_view(project),
+                )
+
+        # Commit best partial repair only if it strictly reduced failure count; else keep failed state visible
+        project.activity.append(
+            ActivityEntry(
+                timestamp=datetime.now(UTC),
+                revision=project.current_revision,
+                actor=actor,
+                kind="repair_incomplete",
+                title=f"Repair did not clear all constraints after {attempts} attempt(s)",
+                detail=last_rationale,
+                status="fail",
+            )
+        )
+        return RepairResponse(
+            repaired=False,
+            attempts=attempts,
+            actor=actor,
+            rationale=last_rationale,
+            diff=None,
+            project=build_project_view(project),
+        )
+
+
+@app.post("/api/projects/{project_id}/procurement/search")
+async def search_procurement(
+    project_id: UUID, req: ProcurementSearchRequest
+) -> ProjectView:
+    async with _lock_for(project_id):
+        project = require_project_exists(project_id)
+        if req.catalog_id:
+            part = project.catalog_snapshot.get(req.catalog_id)
+            if part is None:
+                raise HTTPException(404, f"Unknown catalog component '{req.catalog_id}'.")
+            targets = [part]
+        else:
+            seen: list[str] = []
+            for comp in project.current.spec.components:
+                if comp.catalog_id not in seen and comp.catalog_id in project.catalog_snapshot:
+                    seen.append(comp.catalog_id)
+            targets = [project.catalog_snapshot[cid] for cid in seen]
+
+        results = await asyncio.gather(
+            *(
+                search_part_offers(
+                    part,
+                    query=req.query if req.catalog_id else None,
+                    country=req.country.upper(),
+                    currency=req.currency.upper(),
+                )
+                for part in targets
+            )
+        )
+        project.procurement.source = "shop_mcp"
+        project.procurement.revision = project.current_revision
+        total_offers = 0
+        errors: list[str] = []
+        for res in results:
+            project.procurement.results_by_part[res.catalog_id] = res
+            total_offers += len(res.offers)
+            if res.status == "error" and res.error_message:
+                errors.append(f"{res.sku}: {res.error_message}")
+
+        now = datetime.now(UTC)
+        project.activity.append(
+            ActivityEntry(
+                timestamp=now,
+                revision=project.current_revision,
+                actor="shop_mcp",
+                kind="procurement_search",
+                title=f"Shop.dev MCP searched {len(targets)} BOM part(s)",
+                detail=(
+                    f"Found {total_offers} classified offer(s)."
+                    + (f" Errors: {'; '.join(errors)}" if errors else "")
+                ),
+                status="warn" if errors else "info",
+            )
+        )
+        return build_project_view(project)
+
+
+@app.post("/api/projects/{project_id}/procurement/product")
+async def inspect_procurement_product(
+    project_id: UUID, req: ProductInspectRequest
+) -> dict[str, Any]:
+    require_project_exists(project_id)
     try:
-        parameters = AssemblyParameters(
-            wrist_circumference_mm=edit.wrist_circumference_mm,
-            wall_mm=previous.wall_mm,
-            clearance_mm=previous.clearance_mm,
+        return await get_shop_product(
+            req.product_id,
+            country=req.country.upper(),
+            currency=req.currency.upper(),
         )
-        return publish_prototype(
-            project.report, project_id, edit.base_revision + 1, parameters
+    except ShopMcpError as exc:
+        raise HTTPException(502, str(exc)) from exc
+
+
+@app.post("/api/projects/{project_id}/procurement/select")
+async def select_procurement_offer(
+    project_id: UUID, req: OfferSelectionRequest
+) -> ProjectView:
+    async with _lock_for(project_id):
+        project = require_current_project(project_id, req.base_revision)
+        next_spec = project.current.spec.model_copy(deep=True)
+        comp = next(
+            (c for c in next_spec.components if c.instance_id == req.instance_id), None
         )
-    except (GeometryError, ValidationError) as error:
-        message = (
-            str(error) if isinstance(error, GeometryError) else "Enter a supported wrist size."
+        if comp is None:
+            raise HTTPException(404, f"Unknown BOM instance '{req.instance_id}'.")
+
+        if req.offer_id is None:
+            comp.selected_offer_id = None
+            label = f"Reverted {comp.catalog_id} to catalog reference price"
+        else:
+            part_offers = project.procurement.results_by_part.get(comp.catalog_id)
+            offer = next(
+                (o for o in (part_offers.offers if part_offers else []) if o.offer_id == req.offer_id),
+                None,
+            )
+            if offer is None:
+                raise HTTPException(404, "Selected merchant offer is not available.")
+            if offer.match_kind != "exact_match":
+                raise HTTPException(
+                    422,
+                    f"Offer '{offer.title}' is classified as '{offer.match_kind}'. "
+                    "Only verified exact-SKU offers can replace BOM unit pricing.",
+                )
+            if not offer.available:
+                raise HTTPException(422, f"Offer from {offer.seller_name} is out of stock.")
+            comp.selected_offer_id = offer.offer_id
+            label = f"Selected {offer.seller_name} offer ({offer.formatted_price}) for {comp.catalog_id}"
+
+        await evaluate_and_commit_revision(
+            project, next_spec, label=label, actor="shop_mcp"
         )
-        raise HTTPException(422, message) from error
+        return build_project_view(project)
 
 
 if __name__ == "__main__":

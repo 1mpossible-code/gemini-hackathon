@@ -63,6 +63,7 @@
 .map-card[data-stage="controller"] { grid-area: 3 / 1; }
 .map-card[data-stage="sensor"] { grid-area: 4 / 1; }
 .map-card[data-stage="compatibility"] { grid-area: 2 / 2; }
+.map-card[data-stage="verification"] { grid-area: 3 / 2; }
 .map-card[data-stage="reviewer"] { grid-area: 2 / 3; }
 .map-card[data-stage="hold"] { grid-area: 4 / 2; }
 .map-card[data-stage="geometry"] { grid-area: 3 / 3; }
@@ -201,7 +202,8 @@
   .map-card[data-stage="sensor"] { grid-area: 3 / 2; }
   .map-card[data-stage="compatibility"] { grid-area: 4 / 1 / auto / 3; }
   .map-card[data-stage="reviewer"] { grid-area: 5 / 1 / auto / 3; }
-  .map-card[data-stage="hold"] { grid-area: 6 / 1; }
+  .map-card[data-stage="verification"] { grid-area: 6 / 1; }
+  .map-card[data-stage="hold"] { grid-area: 7 / 1; }
   .map-card[data-stage="geometry"] { grid-area: 6 / 2; }
   .map-card[data-stage="export"] { grid-area: 7 / 2; }
   .map-card::before, .map-card::after { display: none; }

@@ -1,141 +1,117 @@
-import { getPrototype, presentPrototype } from "./prototype.js";
-import { applyResearchEvent, finishResearchMap, readResearch, showResearchMap } from "./research-map.js";
+import {
+  applyResearchEvent,
+  finishResearchMap,
+  readResearch,
+  showResearchMap,
+} from "./research-map.js";
+import {
+  bindWorkbenchEvents,
+  getCurrentProject,
+  loadProjectIntoWorkbench,
+  setCatalogParts,
+  setLiveGeminiStatus,
+} from "./workbench.js";
 
-const form = document.querySelector("#composer");
-const brief = document.querySelector("#brief");
-const connection = document.querySelector("#connection");
-const runButton = document.querySelector("#run");
-const runLabel = document.querySelector("#run-label");
-const sampleButton = document.querySelector("#run-sample");
-const exampleButton = document.querySelector("#fill-example");
-const feedback = document.querySelector("#feedback");
-const resultSection = document.querySelector("#result");
-const download = document.querySelector("#download");
+const $ = sel => document.querySelector(sel);
 
-let example = "Design a wrist-worn finger-gesture detector using muscle sensors for under $100 that sends gesture events to my laptop over Bluetooth Low Energy.";
-let currentReport;
+const form = $("#composer");
+const brief = $("#brief");
+const connection = $("#connection");
+const leanBadge = $("#lean-badge");
+const runButton = $("#run");
+const runLabel = $("#run-label");
+const sampleButton = $("#run-sample");
+const exampleButton = $("#fill-example");
+const tightExampleButton = $("#fill-tight-budget");
+const feedback = $("#feedback");
+
+let sampleBrief =
+  "Design a wrist-worn finger-gesture detector using muscle sensors for under $100 that sends gesture events to my laptop over Bluetooth Low Energy.";
+const tightBrief =
+  "Design a BLE wristband using EMG muscle sensors for finger gestures. Keep core parts under $80 and size the strap for a 175 mm wrist.";
+
 let pending = false;
-let researchRequest;
-
-const formatUsd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-const checkLabels = {
-  catalog_scope: "Catalog scope",
-  core_parts: "Core parts",
-  transport: "Connectivity",
-  signal_interface: "Signal interface",
-  nominal_sensor_supply: "Sensor supply",
-  core_parts_budget: "Core parts budget",
-  prototype_validation: "Prototype validation",
-};
-const statusLabels = { pass: "Passed", fail: "Flagged", unknown: "Needs validation" };
-const reportLabels = { candidate: "Candidate design", blocked: "Design blocked", unsupported: "Outside catalog scope" };
-const transportLabels = {
-  ble: "Bluetooth Low Energy",
-  wifi: "Wi-Fi",
-  wired: "Wired",
-  wireless: "Wireless",
-  other: "Other",
-  unspecified: "Unspecified",
-};
-const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+let researchController = null;
+let latestCompletedReport = null;
 
 if (/mac/i.test(navigator.userAgentData?.platform ?? navigator.platform)) {
-  document.querySelector("#modifier").textContent = "⌘";
+  $("#modifier").textContent = "⌘";
 }
 
-function element(tag, text) {
-  const node = document.createElement(tag);
-  node.textContent = text;
-  return node;
+function showFeedback(msg) {
+  feedback.textContent = msg;
 }
 
-function showFeedback(text) {
-  feedback.textContent = text;
+function showBriefScreen() {
+  $("#brief-view").hidden = false;
+  $("#research-view").hidden = true;
+  $("#blocked-view").hidden = true;
+  $("#workbench-view").hidden = true;
+  $("#engineering-statusbar").hidden = true;
+  $("#Capabilities-pill").hidden = false;
+  $("#nav-context").textContent = "New Design Brief";
+  brief.focus();
 }
 
-function sourceLink(label, url) {
-  const parsed = new URL(url);
-  if (!["https:", "http:"].includes(parsed.protocol)) return element("span", label);
-  const link = element("a", label);
-  link.href = parsed.href;
-  link.target = "_blank";
-  link.rel = "noopener noreferrer";
-  return link;
+function showResearchScreen() {
+  $("#brief-view").hidden = true;
+  $("#research-view").hidden = false;
+  $("#blocked-view").hidden = true;
+  $("#workbench-view").hidden = true;
+  $("#engineering-statusbar").hidden = true;
+  $("#Capabilities-pill").hidden = false;
+  $("#nav-context").textContent = "Agent Research DAG";
 }
 
-function renderRequirements(requirements) {
-  const facts = [["Connectivity", transportLabels[requirements.transport]]];
-  if (requirements.budget_usd_cents !== null) {
-    const prefix = requirements.budget_exclusive ? "Under " : "Up to ";
-    facts.push(["Parts budget", prefix + formatUsd.format(requirements.budget_usd_cents / 100)]);
-  }
-  if (requirements.wrist_circumference_mm !== null) {
-    facts.push(["Wrist circumference", requirements.wrist_circumference_mm + " mm"]);
-  }
-  if (requirements.gestures.length) {
-    facts.push(["Gestures", requirements.gestures.join(", ")]);
-  }
-  document.querySelector("#requirements").replaceChildren(...facts.map(([label, value]) => {
-    const fact = element("div", "");
-    fact.append(element("dt", label), element("dd", value));
-    return fact;
-  }));
-}
+function renderBlockedReport(report) {
+  $("#brief-view").hidden = true;
+  $("#research-view").hidden = true;
+  $("#workbench-view").hidden = true;
+  $("#blocked-view").hidden = false;
+  $("#engineering-statusbar").hidden = true;
+  $("#Capabilities-pill").hidden = false;
+  $("#nav-context").textContent = "Blocked Report";
 
-function renderReport(report) {
-  currentReport = report;
-  const review = report.review;
-  const mode = report.mode === "offline" ? "Offline sample" : "Gemini research";
-  document.querySelector("#result-mode").textContent = mode + " / " + reportLabels[review.status];
-  document.querySelector("#result-brief").textContent = report.brief;
-  renderRequirements(report.requirements);
-  document.querySelector("#subtotal").textContent = review.core_subtotal_usd_cents === null
-    ? "Core subtotal unavailable"
-    : formatUsd.format(review.core_subtotal_usd_cents / 100) + " core subtotal";
+  const statusMap = {
+    blocked: "Design blocked by constraints",
+    unsupported: "Outside supported wearable catalog scope",
+    candidate: "Candidate report",
+  };
+  $("#blocked-mode").textContent = `${
+    report.mode === "offline" ? "Offline sample" : `Gemini (${report.model})`
+  } · ${statusMap[report.review.status] || report.review.status}`;
+  $("#blocked-brief").textContent = report.brief;
 
-  const parts = review.selected_parts.map(part => {
-    const row = element("li", "");
-    row.append(element("strong", part.name), element("small", part.manufacturer + " / " + part.sku));
-    part.technical_sources.forEach((url, index) => {
-      row.append(sourceLink(index ? "Technical source " + (index + 1) : "Technical source", url));
-    });
-    if (part.quote) {
-      const label = formatUsd.format(part.quote.unit_price_usd_cents / 100) + " at " + part.quote.vendor;
-      row.append(sourceLink(label, part.quote.url));
-    }
-    return row;
-  });
-  document.querySelector("#parts").replaceChildren(...(parts.length ? parts : [element("li", "No parts proposed")]));
-  document.querySelector("#findings").replaceChildren(...review.findings.map(finding => {
-    const row = element("li", "");
-    const label = checkLabels[finding.check] ?? finding.check;
-    row.append(element("strong", label + " · " + statusLabels[finding.status]), element("small", finding.detail));
-    return row;
-  }));
-  const nextSteps = document.querySelector("#next-steps");
-  nextSteps.replaceChildren(...report.review_notes.next_steps.map(step => element("li", step)));
-  nextSteps.closest("section").hidden = !report.review_notes.next_steps.length;
-  resultSection.hidden = false;
-  presentPrototype(report.prototype, report.prototype_error);
-  if (!reducedMotion.matches) {
-    const sections = resultSection.querySelectorAll(".requirements, .report-grid, .next-steps:not([hidden])");
-    sections.forEach((section, index) => {
-      section.animate([{ opacity: 0.5, transform: "translateY(8px)" }, { opacity: 1, transform: "none" }], {
-        duration: 205,
-        delay: index * 40,
-        easing: "cubic-bezier(.2,.72,.2,1)",
-        fill: "backwards",
-      });
-    });
-  }
+  const findingsList = $("#blocked-findings");
+  findingsList.replaceChildren(
+    ...(report.review.findings || []).map(f => {
+      const li = document.createElement("li");
+      const strong = document.createElement("strong");
+      strong.textContent = `${f.check.replaceAll("_", " ")} · ${f.status.toUpperCase()}`;
+      const small = document.createElement("small");
+      small.textContent = f.detail;
+      li.append(strong, small);
+      return li;
+    })
+  );
+
+  const stepsList = $("#blocked-next-steps");
+  stepsList.replaceChildren(
+    ...(report.review_notes?.next_steps || []).map(step => {
+      const li = document.createElement("li");
+      li.textContent = step;
+      return li;
+    })
+  );
 }
 
 function setBusy(busy, mode) {
   pending = busy;
   runButton.disabled = busy;
-  runLabel.textContent = busy && mode === "live" ? "Researching…" : "Research design";
+  runLabel.textContent = busy && mode === "live" ? "Researching…" : "Research with Gemini";
   sampleButton.disabled = busy;
   exampleButton.disabled = busy;
+  tightExampleButton.disabled = busy;
   brief.readOnly = busy;
   form.setAttribute("aria-busy", String(busy));
 }
@@ -144,7 +120,7 @@ async function startResearch(mode) {
   if (pending) return;
   const value = brief.value.trim();
   if (mode === "live" && !value) {
-    showFeedback("Enter a brief to start research.");
+    showFeedback("Enter a hardware design brief or launch the offline wristband studio.");
     brief.setAttribute("aria-invalid", "true");
     brief.focus();
     return;
@@ -152,45 +128,73 @@ async function startResearch(mode) {
   brief.removeAttribute("aria-invalid");
   setBusy(true, mode);
   showFeedback("");
-  resultSection.hidden = true;
-  researchRequest = new AbortController();
-  showResearchMap(mode, mode === "sample" ? example : value);
+  researchController = new AbortController();
+  $("#open-workbench-btn").hidden = true;
+  showResearchScreen();
+  showResearchMap(mode, mode === "sample" ? sampleBrief : value);
+
   try {
-    const data = await readResearch(mode, value, researchRequest.signal, applyResearchEvent);
-    renderReport(data);
+    const report = await readResearch(
+      mode,
+      value,
+      researchController.signal,
+      applyResearchEvent
+    );
+    latestCompletedReport = report;
     finishResearchMap("completed");
-  } catch (error) {
-    if (researchRequest.signal.aborted) {
-      finishResearchMap("stopped", "You can edit the brief and run it again.");
+    if (report.project) {
+      $("#open-workbench-btn").hidden = false;
+      await loadProjectIntoWorkbench(report.project, report);
     } else {
-      const message = error instanceof TypeError ? "Could not reach FORGE. Check the server and try again." : error.message;
+      renderBlockedReport(report);
+    }
+  } catch (error) {
+    if (researchController.signal.aborted) {
+      finishResearchMap("stopped", "Run cancelled. You can edit the brief and try again.");
+    } else {
+      const message =
+        error instanceof TypeError
+          ? "Could not reach FORGE server. Check that uvicorn is running."
+          : error.message;
       finishResearchMap("failed", message);
     }
   } finally {
-    researchRequest = null;
-    setBusy(false);
+    researchController = null;
+    setBusy(false, mode);
   }
 }
 
-document.querySelector("#stop-research").addEventListener("click", () => researchRequest?.abort());
-document.querySelector("#edit-brief").addEventListener("click", () => {
-  document.querySelector("#brief-view").hidden = false;
-  document.querySelector("#research-view").hidden = true;
-  brief.focus();
-});
-document.querySelector("#view-research-report").addEventListener("click", event => {
-  event.preventDefault();
-  document.querySelector("#result-title").focus({ preventScroll: true });
-  resultSection.scrollIntoView({ behavior: reducedMotion.matches ? "instant" : "smooth" });
+$("#brand-home").addEventListener("click", e => {
+  e.preventDefault();
+  if (getCurrentProject()) {
+    $("#brief-view").hidden = true;
+    $("#research-view").hidden = true;
+    $("#blocked-view").hidden = true;
+    $("#workbench-view").hidden = false;
+    $("#engineering-statusbar").hidden = false;
+    $("#Capabilities-pill").hidden = true;
+    $("#nav-context").textContent = "Workbench";
+  } else {
+    showBriefScreen();
+  }
 });
 
-form.addEventListener("submit", event => {
-  event.preventDefault();
+$("#stop-research").addEventListener("click", () => researchController?.abort());
+$("#edit-brief").addEventListener("click", showBriefScreen);
+$("#blocked-edit-brief").addEventListener("click", showBriefScreen);
+$("#open-workbench-btn").addEventListener("click", () => {
+  if (getCurrentProject()) {
+    loadProjectIntoWorkbench(getCurrentProject(), latestCompletedReport);
+  }
+});
+
+form.addEventListener("submit", e => {
+  e.preventDefault();
   startResearch("live");
 });
-brief.addEventListener("keydown", event => {
-  if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-    event.preventDefault();
+brief.addEventListener("keydown", e => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
     form.requestSubmit();
   }
 });
@@ -199,42 +203,46 @@ brief.addEventListener("input", () => {
   if (!pending) showFeedback("");
 });
 exampleButton.addEventListener("click", () => {
-  brief.value = example;
+  brief.value = sampleBrief;
   brief.removeAttribute("aria-invalid");
   showFeedback("");
   brief.focus();
-  brief.setSelectionRange(brief.value.length, brief.value.length);
+});
+tightExampleButton.addEventListener("click", () => {
+  brief.value = tightBrief;
+  brief.removeAttribute("aria-invalid");
+  showFeedback("");
+  brief.focus();
 });
 sampleButton.addEventListener("click", () => startResearch("sample"));
 
-function pressFeedback(event) {
-  const button = event.currentTarget;
-  if (reducedMotion.matches) return;
-  const bounds = button.getBoundingClientRect();
-  button.style.transformOrigin = (event.clientX - bounds.left) + "px " + (event.clientY - bounds.top) + "px";
-}
-[runButton, exampleButton, sampleButton].forEach(button => button.addEventListener("pointerdown", pressFeedback));
+bindWorkbenchEvents(
+  () => showBriefScreen(),
+  () => {
+    showResearchScreen();
+    $("#open-workbench-btn").hidden = !getCurrentProject();
+    $("#edit-brief").hidden = false;
+    $("#stop-research").hidden = true;
+  }
+);
 
-download.addEventListener("click", () => {
-  if (!currentReport) return;
-  const updatedReport = { ...currentReport, prototype: getPrototype() };
-  const reportFile = new Blob([JSON.stringify(updatedReport, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(reportFile);
-  const link = element("a", "");
-  link.href = url;
-  link.download = "forge-research.json";
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-});
-
-fetch("/api/session")
-  .then(response => {
-    if (!response.ok) throw new Error("Session unavailable");
-    return response.json();
+Promise.all([
+  fetch("/api/session").then(r => (r.ok ? r.json() : null)),
+  fetch("/api/catalog").then(r => (r.ok ? r.json() : null)),
+])
+  .then(([sess, cat]) => {
+    if (cat?.parts) setCatalogParts(cat.parts);
+    if (sess) {
+      connection.dataset.live = String(sess.live);
+      connection.lastElementChild.textContent = sess.live
+        ? `Gemini live (${sess.gemini_model})`
+        : "Offline fixture mode";
+      leanBadge.dataset.ready = String(sess.lean_available);
+      leanBadge.textContent = sess.lean_available ? "Lean 4: ready" : "Lean 4: unavailable";
+      setLiveGeminiStatus(sess.live);
+      if (sess.sample_brief) sampleBrief = sess.sample_brief;
+    }
   })
-  .then(session => {
-    connection.dataset.live = String(session.live);
-    connection.lastElementChild.textContent = session.live ? "Gemini configured" : "Offline sample available";
-    example = session.sample_brief;
-  })
-  .catch(() => { connection.lastElementChild.textContent = "Server unavailable"; });
+  .catch(() => {
+    connection.lastElementChild.textContent = "Server unavailable";
+  });

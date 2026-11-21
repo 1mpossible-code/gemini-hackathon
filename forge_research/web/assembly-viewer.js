@@ -16,8 +16,17 @@ import {
   WebGLRenderer,
 } from "./vendor/three-runtime.js";
 
-const EXPLODE_OFFSETS = { "sensor-1": .012, board: .028, "enclosure-lid": .043 };
-const CAMERA_ANGLE = new Vector3(1.10, 0.78, 1.5).normalize();
+const EXPLODE_OFFSETS = {
+  "sensor-1": 0.012,
+  "sensor-2": 0.012,
+  board: 0.028,
+  "enclosure-lid": 0.045,
+};
+const PRESET_ANGLES = {
+  iso: new Vector3(1.1, 0.78, 1.5).normalize(),
+  top: new Vector3(0.01, 1.95, 0.08).normalize(),
+  front: new Vector3(0.0, 0.24, 1.8).normalize(),
+};
 
 function disposeModel(model) {
   const materials = new Set();
@@ -35,13 +44,14 @@ export class AssemblyViewer {
   constructor(container, onPick, onContextLost) {
     this.onPick = onPick;
     this.scene = new Scene();
-    this.camera = new PerspectiveCamera(36, 1, 0.004, 12);
+    this.camera = new PerspectiveCamera(35, 1, 0.004, 12);
     this.renderer = new WebGLRenderer({ antialias: true, alpha: true });
     this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
     this.renderer.setClearColor(0x000000, 0);
     this.model = null;
     this.loadToken = 0;
     this.exploded = true;
+    this.wireframe = false;
     this.selectedId = null;
     this.nodeIds = new Map();
     this.parts = new Map();
@@ -51,44 +61,50 @@ export class AssemblyViewer {
 
     const canvas = this.renderer.domElement;
     canvas.tabIndex = 0;
-    canvas.setAttribute("aria-label", "3D assembly viewport. Use the arrow keys to orbit.");
-    canvas.setAttribute("aria-describedby", "view-help");
+    canvas.setAttribute(
+      "aria-label",
+      "Interactive 3D hardware assembly. Drag or use arrow keys to orbit, scroll to zoom, click a component to inspect."
+    );
     container.replaceChildren(canvas);
     canvas.addEventListener("webglcontextlost", event => {
       event.preventDefault();
       this.contextLost = true;
-      onContextLost();
+      onContextLost?.();
     });
 
     this.controls = new OrbitControls(this.camera, canvas);
-    this.controls.enablePan = false;
-    this.controls.rotateSpeed = .8;
-    this.controls.minDistance = .035;
-    this.controls.maxDistance = 2;
+    this.controls.enablePan = true;
+    this.controls.rotateSpeed = 0.82;
+    this.controls.minDistance = 0.035;
+    this.controls.maxDistance = 2.2;
     this.controls.addEventListener("change", () => this.render());
     canvas.addEventListener("keydown", event => this.orbitWithKey(event));
     canvas.addEventListener("pointerdown", event => {
-      this.pointerStart = event.isPrimary && event.button === 0
-        ? new Vector2(event.clientX, event.clientY)
-        : null;
+      this.pointerStart =
+        event.isPrimary && event.button === 0
+          ? new Vector2(event.clientX, event.clientY)
+          : null;
     });
     canvas.addEventListener("pointerup", event => this.pick(event));
-    canvas.addEventListener("pointercancel", () => { this.pointerStart = null; });
+    canvas.addEventListener("pointercancel", () => {
+      this.pointerStart = null;
+    });
 
-    this.scene.add(new HemisphereLight(0xf0f0ec, 0x666666, 2.1));
-    const key = new DirectionalLight(0xffffff, 2.6);
-    key.position.set(1, 2, 1.4);
+    this.scene.add(new HemisphereLight(0xf2f3f0, 0x5c626b, 2.2));
+    const key = new DirectionalLight(0xffffff, 2.7);
+    key.position.set(1.1, 2.1, 1.4);
     this.scene.add(key);
-    const rim = new DirectionalLight(0xf0f0ef, 1.9);
-    rim.position.set(-1.2, .85, -.9);
+    const rim = new DirectionalLight(0xd9e6f5, 1.85);
+    rim.position.set(-1.3, 0.9, -0.95);
     this.scene.add(rim);
-    this.grid = new GridHelper(.65, 58, 0x545557, 0x454648);
+
+    this.grid = new GridHelper(0.65, 58, 0x4b535e, 0x2d333b);
     this.grid.material.transparent = true;
-    this.grid.material.opacity = .28;
+    this.grid.material.opacity = 0.34;
     this.scene.add(this.grid);
     this.grid.visible = false;
 
-    this.highlight = new Box3Helper(new Box3(), new Color(0xecebe6));
+    this.highlight = new Box3Helper(new Box3(), new Color(0xf5c86b));
     this.highlight.material.depthTest = false;
     this.highlight.renderOrder = 20;
     this.highlight.visible = false;
@@ -104,10 +120,12 @@ export class AssemblyViewer {
     }).observe(container);
   }
 
-  async load(prototype, { keepView = false } = {}) {
+  async load(glbUrl, manifest, { keepView = false } = {}) {
     const token = ++this.loadToken;
-    const source = new URL(prototype.glb_url, window.location.href);
-    if (source.origin !== window.location.origin) throw new Error("Model URL must be local.");
+    const source = new URL(glbUrl, window.location.href);
+    if (source.origin !== window.location.origin) {
+      throw new Error("Model URL must be local.");
+    }
     const { scene } = await this.loader.loadAsync(source.href);
     if (token !== this.loadToken) {
       disposeModel(scene);
@@ -115,25 +133,31 @@ export class AssemblyViewer {
     }
     this.removeModel();
     this.model = scene;
-    this.nodeIds = new Map(prototype.manifest.nodes.map(node => [
-      node.id,
-      node.part_instance_id || node.id,
-    ]));
+    this.nodeIds = new Map(
+      manifest.nodes.map(node => [node.id, node.part_instance_id || node.id])
+    );
     this.model.traverse(object => {
       if (!this.nodeIds.has(object.name)) return;
       const id = this.nodeIds.get(object.name);
       if (!this.parts.has(id)) this.parts.set(id, []);
       this.parts.get(id).push(object);
-      if (Object.hasOwn(EXPLODE_OFFSETS, id) && this.nodeIds.get(object.parent?.name) !== id) {
-        this.explodedParts.set(object, [object.position.clone(), EXPLODE_OFFSETS[id]]);
+      if (
+        Object.hasOwn(EXPLODE_OFFSETS, id) &&
+        this.nodeIds.get(object.parent?.name) !== id
+      ) {
+        this.explodedParts.set(object, [
+          object.position.clone(),
+          EXPLODE_OFFSETS[id],
+        ]);
       }
     });
     this.scene.add(this.model);
+    this.applyWireframe();
     this.bounds = new Box3().setFromObject(this.model);
-    this.grid.position.y = this.bounds.min.y - .004;
+    this.grid.position.y = this.bounds.min.y - 0.004;
     this.grid.visible = true;
     this.setExploded(this.exploded);
-    if (!keepView) this.reset();
+    if (!keepView) this.reset("iso");
     return true;
   }
 
@@ -155,16 +179,17 @@ export class AssemblyViewer {
     this.render();
   }
 
-  reset() {
+  reset(preset = "iso") {
     if (!this.model) return;
+    const angle = PRESET_ANGLES[preset] || PRESET_ANGLES.iso;
     const displayBounds = new Box3().setFromObject(this.model);
     const size = displayBounds.getSize(new Vector3());
     const center = displayBounds.getCenter(new Vector3());
-    const vertical = this.camera.fov * Math.PI / 360;
-    const horizontal = Math.atan(Math.tan(vertical) * this.camera.aspect);
-    const radius = Math.max(size.x, size.y, size.z) * .64;
-    const distance = Math.max(radius / Math.sin(Math.min(vertical, horizontal)), .1);
-    this.camera.position.copy(center).addScaledVector(CAMERA_ANGLE, distance);
+    const vertical = (this.camera.fov * Math.PI) / 360;
+    const horizontal = Math.atan(Math.tan(vertical) * Math.max(this.camera.aspect, 0.5));
+    const radius = Math.max(size.x, size.y, size.z) * 0.62;
+    const distance = Math.max(radius / Math.sin(Math.min(vertical, horizontal)), 0.11);
+    this.camera.position.copy(center).addScaledVector(angle, distance);
     this.controls.target.copy(center);
     this.controls.update();
     this.render();
@@ -179,15 +204,31 @@ export class AssemblyViewer {
     this.setSelection(this.selectedId);
   }
 
+  setWireframe(enabled) {
+    this.wireframe = enabled;
+    this.applyWireframe();
+    this.render();
+  }
+
+  applyWireframe() {
+    if (!this.model) return;
+    this.model.traverse(object => {
+      if (!object.isMesh) return;
+      for (const mat of [object.material].flat()) {
+        mat.wireframe = this.wireframe;
+      }
+    });
+  }
+
   setSelection(id) {
     this.selectedId = id;
     const selected = this.parts.get(id);
     this.highlight.visible = Boolean(selected?.length);
-    if (selected?.length) {
+    if (selected?.length && this.model) {
       this.model.updateMatrixWorld();
       this.highlight.box.makeEmpty();
       selected.forEach(part => this.highlight.box.expandByObject(part));
-      this.highlight.box.expandByScalar(.0015);
+      this.highlight.box.expandByScalar(0.0016);
     }
     this.render();
   }
@@ -195,11 +236,17 @@ export class AssemblyViewer {
   pick(event) {
     const start = this.pointerStart;
     this.pointerStart = null;
-    if (!this.model || !start || start.distanceTo(new Vector2(event.clientX, event.clientY)) > 5) return;
+    if (
+      !this.model ||
+      !start ||
+      start.distanceTo(new Vector2(event.clientX, event.clientY)) > 5
+    ) {
+      return;
+    }
     const bounds = this.renderer.domElement.getBoundingClientRect();
     const pointer = new Vector2(
-      2 * (event.clientX - bounds.left) / bounds.width - 1,
-      1 - 2 * (event.clientY - bounds.top) / bounds.height,
+      (2 * (event.clientX - bounds.left)) / bounds.width - 1,
+      1 - (2 * (event.clientY - bounds.top)) / bounds.height
     );
     this.raycaster.setFromCamera(pointer, this.camera);
     for (const hit of this.raycaster.intersectObject(this.model, true)) {
@@ -207,7 +254,7 @@ export class AssemblyViewer {
       while (object && object !== this.model) {
         const id = this.nodeIds.get(object.name);
         if (id) {
-          this.onPick(id);
+          this.onPick?.(id);
           return;
         }
         object = object.parent;
@@ -217,10 +264,10 @@ export class AssemblyViewer {
 
   orbitWithKey(event) {
     const increments = {
-      ArrowLeft: [-.14, 0],
-      ArrowRight: [.14, 0],
-      ArrowUp: [0, -.14],
-      ArrowDown: [0, .14],
+      ArrowLeft: [-0.14, 0],
+      ArrowRight: [0.14, 0],
+      ArrowUp: [0, -0.14],
+      ArrowDown: [0, 0.14],
     };
     const step = increments[event.key];
     if (!this.model || !step) return;

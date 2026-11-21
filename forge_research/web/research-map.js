@@ -6,6 +6,7 @@ const stages = {
   sensor: { label: "EMG sensors", kind: "Catalog tool", tone: "blue", copy: "Sensor candidates.", icon: "M3 12h4l3-7 4 14 3-7h4" },
   compatibility: { label: "Compatibility", kind: "Decision gate", tone: "amber", copy: "Check whether the parts work together.", icon: "m12 3 9 9-9 9-9-9z M9 12l2 2 4-5" },
   reviewer: { label: "Design review", kind: "Reviewer agent", tone: "violet", copy: "Surface open questions and next steps.", icon: "M6 3h12v18H6z M9 8h6 M9 12h6 M9 16h4" },
+  verification: { label: "Lean 4 proofs", kind: "Formal kernel", tone: "green", copy: "Verify electrical & budget obligations.", icon: "M12 3 4 7v5c0 5 3.5 8.5 8 9 4.5-.5 8-4 8-9V7l-8-4Z M9 12l2 2 4-4" },
   hold: { label: "Build on hold", kind: "Decision branch", tone: "amber", copy: "Keep the report when the build cannot proceed.", icon: "M12 3 2.5 20h19z M12 9v5 M12 17h.01" },
   geometry: { label: "Build geometry", kind: "Model builder", tone: "blue", copy: "Assemble the enclosure and parts.", icon: "m4 9 8-5 8 5-8 5z M4 9v6l8 5 8-5V9 M12 14v6" },
   export: { label: "Export model", kind: "GLB output", tone: "green", copy: "Prepare the model for the 3D viewer.", icon: "M12 3v12m-4-4 4 4 4-4M5 15v6h14v-6" },
@@ -18,6 +19,7 @@ const connections = [
   ["compatibility", "reviewer", "main"],
   ["compatibility", "hold", "down"],
   ["reviewer", "geometry", "down"],
+  ["geometry", "verification", "branch"],
   ["geometry", "export", "down"],
 ];
 const labels = {
@@ -258,6 +260,13 @@ function renderDetail() {
     appendEntries((data.findings ?? []).map(finding => finding.detail ?? String(finding)));
   }
   if (selected === "reviewer") appendEntries(data.next_steps ?? []);
+  if (selected === "verification") {
+    appendEntries([
+      Number.isFinite(data.verified_count) && data.verified_count + " obligation(s) formally verified",
+      Number.isFinite(data.failed_count) && data.failed_count + " obligation(s) refuted",
+      Number.isFinite(data.unverified_count) && data.unverified_count + " obligation(s) unverified (missing evidence)",
+    ].filter(Boolean));
+  }
   if (selected === "export" && data.format) {
     appendEntries([data.format + (Number.isFinite(data.byte_count) ? " · " + Math.round(data.byte_count / 1024) + " KiB" : "")]);
   }
@@ -287,7 +296,8 @@ export function showResearchMap(mode, brief) {
   }
   $("brief-view").hidden = true;
   $("research-view").hidden = false;
-  $("view-research-report").hidden = true;
+  const openBtn = $("open-workbench-btn");
+  if (openBtn) openBtn.hidden = true;
   $("edit-brief").hidden = true;
   $("stop-research").hidden = false;
   $("map-brief").textContent = brief;
@@ -315,6 +325,14 @@ export function applyResearchEvent(event) {
     step.parts = [...byId.values()];
     const count = step.parts.length;
     update(id, "completed", count + (count === 1 ? " catalog entry returned." : " catalog entries returned."), null, count + (count === 1 ? " candidate" : " candidates"), { log: true });
+    return;
+  }
+  if (event.type === "verification") {
+    const d = event.data ?? {};
+    const summary = event.status === "completed"
+      ? `${d.verified_count ?? 0} verified · ${d.failed_count ?? 0} failed`
+      : "Checking Lean 4 proofs";
+    update("verification", event.status === "completed" ? "completed" : "running", event.detail, d, summary, { log: true });
     return;
   }
   if (event.type !== "stage" || !state.has(event.stage) || !labels[event.status]) return;
@@ -346,7 +364,8 @@ export function finishResearchMap(outcome, message) {
   const stoppedFromButton = document.activeElement === $("stop-research");
   $("stop-research").hidden = true;
   $("edit-brief").hidden = false;
-  $("view-research-report").hidden = outcome !== "completed";
+  const openBtn = $("open-workbench-btn");
+  if (openBtn) openBtn.hidden = outcome !== "completed";
   if (stoppedFromButton) $("edit-brief").focus();
 }
 
