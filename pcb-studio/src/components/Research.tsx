@@ -17,7 +17,7 @@ export function ResearchPane() {
       const parts = (d.parts ?? []).map((p) => p.name).filter(Boolean).join(', ')
       setStudio({
         mode: 'engineer',
-        scale: 'board',
+        scale: 'system',
         selected: null,
         device: null,
         // /api/generate rejects prompts over 2000 characters.

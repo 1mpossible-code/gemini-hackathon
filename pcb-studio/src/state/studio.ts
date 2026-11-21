@@ -78,7 +78,7 @@ export function computeBoardBomCost(
 }
 
 let state: StudioState = {
-  scale: new URLSearchParams(location.search).get('scale') === 'board' || new URLSearchParams(location.search).has('brief') ? 'board' : 'system',
+  scale: new URLSearchParams(location.search).get('scale') === 'board' ? 'board' : 'system',
   mode: new URLSearchParams(location.search).get('mode') === 'engineer' || new URLSearchParams(location.search).has('brief') ? 'engineer' : 'research',
   pendingPrompt: briefFromUrl(),
   system: briefFromUrl() ? systemFromPrompt(briefFromUrl()!) : defaultSystem,

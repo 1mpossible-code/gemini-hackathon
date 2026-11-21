@@ -38,6 +38,21 @@ export interface SystemDesign {
   chassis: { w: number; d: number; t: number }
   pcbHeight: number // standoff height under the custom PCB
   devices: SystemDevice[]
+  /** Mechanical parts around the chassis: arms, rotors, walls, legs. Millimetres, y up, plate top at y = 0. */
+  structure?: Prim[]
+}
+
+export type PrimMaterial = 'metal' | 'plastic' | 'rubber' | 'carbon' | 'clear'
+export interface Prim {
+  shape: 'box' | 'cyl'
+  /** box: width, height, depth. cyl: radius, height, unused. */
+  size: [number, number, number]
+  pos: [number, number, number]
+  /** Rotation about y in degrees. */
+  yaw?: number
+  mat: PrimMaterial
+  /** Spins about y in the viewer (rotors). */
+  spin?: boolean
 }
 
 const motor = (id: string, port: string, x: number, z: number, label: string): SystemDevice => ({
@@ -201,8 +216,45 @@ function plate(text: string, picks: CatalogItem[]): SystemDesign {
  * a wrist band, everything else a mounting plate with the devices the brief asks
  * for. Never empty: with no matches it falls back to a status display and button.
  */
+const FLYER = /\b(drone|quad(copter)?|fpv|multirotor|uav|hexa(copter)?|octo(copter)?|copter)\b/i
+
+/** Multirotor airframe around a centre plate: arms, motors, rotors and skids. */
+function airframe(text: string, picks: CatalogItem[]): SystemDesign {
+  const base = plate(text, picks.filter((p) => busFor(p) !== 'motor'))
+  const arms = /octo/i.test(text) ? 8 : /hexa/i.test(text) ? 6 : 4
+  const { w, d } = base.chassis
+  const reach = Math.hypot(w, d) / 2 + 95
+  const structure: Prim[] = []
+  for (let i = 0; i < arms; i++) {
+    const a = ((i + 0.5) / arms) * Math.PI * 2
+    const x = Math.sin(a) * reach
+    const z = Math.cos(a) * reach
+    const yaw = (a * 180) / Math.PI
+    structure.push({ shape: 'box', size: [14, 5, reach], pos: [x / 2, -2.5, z / 2], yaw, mat: 'carbon' })
+    structure.push({ shape: 'cyl', size: [14, 18, 0], pos: [x, 9, z], mat: 'metal' })
+    structure.push({ shape: 'box', size: [124, 1.4, 13], pos: [x, 20, z], yaw: i * 37, mat: 'clear', spin: true })
+    structure.push({ shape: 'cyl', size: [3, 34, 0], pos: [x * 0.55, -22, z * 0.55], mat: 'plastic' })
+  }
+  return { ...base, name: titleFor(text, 'Airframe A1'), structure }
+}
+
+/** Open tray around a mounting plate, with feet, so a bench device reads as a product. */
+function tray(sys: SystemDesign): SystemDesign {
+  const { w, d } = sys.chassis
+  const h = 16
+  const structure: Prim[] = [
+    { shape: 'box', size: [w, h, 2.4], pos: [0, h / 2, -d / 2 + 1.2], mat: 'plastic' },
+    { shape: 'box', size: [w, h, 2.4], pos: [0, h / 2, d / 2 - 1.2], mat: 'plastic' },
+    { shape: 'box', size: [2.4, h, d], pos: [-w / 2 + 1.2, h / 2, 0], mat: 'plastic' },
+    { shape: 'box', size: [2.4, h, d], pos: [w / 2 - 1.2, h / 2, 0], mat: 'plastic' },
+  ]
+  for (const sx of [-1, 1]) for (const sz of [-1, 1]) structure.push({ shape: 'cyl', size: [7, 6, 0], pos: [sx * (w / 2 - 14), -6, sz * (d / 2 - 14)], mat: 'rubber' })
+  return { ...sys, structure }
+}
+
 export function systemFromPrompt(text: string): SystemDesign {
   const picks = devicesForBrief(text)
+  if (FLYER.test(text)) return airframe(text, picks)
   if (VEHICLE.test(text) && !WEARABLE.test(text)) {
     const roverTags = new Set(defaultSystem.devices.flatMap((d) => byId[d.catalogId]?.tags ?? []).filter((t) => !GENERIC_TAGS.has(t)))
     const extra = picks.filter((p) => busFor(p) !== 'motor' && !p.tags.some((t) => roverTags.has(t))).slice(0, 2)
@@ -211,7 +263,9 @@ export function systemFromPrompt(text: string): SystemDesign {
     return { ...defaultSystem, name: titleFor(text, defaultSystem.name), devices: [...defaultSystem.devices, ...base.devices.filter((d) => d.id !== 'bat').map((d, i) => ({ ...d, port: `J${8 + i}`, x: i % 2 ? 58 : -58, z: 0 }))] }
   }
   if (WEARABLE.test(text)) return wearable(text, picks)
-  return plate(text, picks.length ? picks : [byId['ssd1306-096'], byId['tact-6mm']].filter(Boolean))
+  const sys = plate(text, picks.length ? picks : [byId['ssd1306-096'], byId['tact-6mm']].filter(Boolean))
+  // Wheeled builds keep an open plate so the drive motors and wheels stay visible.
+  return sys.devices.some((d) => d.bus === 'motor') ? sys : tray(sys)
 }
 
 /** Demo briefs. Each one must produce a working system and board. */

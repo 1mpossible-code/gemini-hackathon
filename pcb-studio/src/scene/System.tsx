@@ -7,7 +7,7 @@ import { useFrame, useThree } from '@react-three/fiber'
 import { CameraControls, Html } from '@react-three/drei'
 import { byId } from '@/data/catalog'
 import type { Board } from '@/data/board'
-import { BUS_COLOR, type SystemDesign, type SystemDevice } from '@/data/system'
+import { BUS_COLOR, type Prim, type PrimMaterial, type SystemDesign, type SystemDevice } from '@/data/system'
 import { routeNets } from '@/pcb/footprint'
 import { getStudio, setStudio, useStudio } from '@/state/studio'
 import { buildDevice } from './devices'
@@ -104,6 +104,41 @@ function Chassis({ sys }: { sys: SystemDesign }) {
       <instancedMesh ref={inst} args={[undefined, undefined, grid.length]} material={holeMat} receiveShadow>
         <cylinderGeometry args={[1.6, 1.6, 0.1, 18]} />
       </instancedMesh>
+    </group>
+  )
+}
+
+const PRIM_MAT: Record<PrimMaterial, THREE.Material> = {
+  metal: new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.3, metalness: 1 }),
+  plastic: new THREE.MeshStandardMaterial({ color: 0x2a2d31, roughness: 0.6, metalness: 0.1 }),
+  rubber: new THREE.MeshStandardMaterial({ color: 0x101113, roughness: 0.95 }),
+  carbon: new THREE.MeshPhysicalMaterial({ color: 0x15171a, roughness: 0.35, metalness: 0.4, clearcoat: 0.6 }),
+  clear: new THREE.MeshPhysicalMaterial({ color: 0xcfd6dd, roughness: 0.2, transparent: true, opacity: 0.45 }),
+}
+
+/** Arms, rotors, walls and feet described by the system design. */
+function Structure({ prims }: { prims: Prim[] }) {
+  const spinners = useRef<(THREE.Mesh | null)[]>([])
+  useFrame((_, dt) => {
+    for (const m of spinners.current) if (m) m.rotation.y += dt * 9
+  })
+  return (
+    <group>
+      {prims.map((p, i) => (
+        <mesh
+          key={i}
+          ref={(m) => {
+            if (p.spin) spinners.current[i] = m
+          }}
+          position={p.pos}
+          rotation={[0, ((p.yaw ?? 0) * Math.PI) / 180, 0]}
+          material={PRIM_MAT[p.mat]}
+          castShadow
+          receiveShadow
+        >
+          {p.shape === 'box' ? <boxGeometry args={p.size} /> : <cylinderGeometry args={[p.size[0], p.size[0], p.size[1], 28]} />}
+        </mesh>
+      ))}
     </group>
   )
 }
@@ -504,6 +539,7 @@ export function SystemRoot() {
     <>
       <group name="pcb-root" ref={root} onPointerMissed={() => setStudio({ device: null })}>
         <Chassis sys={sys} />
+        {sys.structure && <Structure prims={sys.structure} />}
         <Pcb sys={sys} />
         {sys.devices.map((d, i) => (
           <Device key={d.id + d.catalogId} d={d} index={i} sys={sys} onReady={onReady} />
