@@ -16,6 +16,31 @@ function download(data: BlobPart, name: string, type: string) {
   setTimeout(() => URL.revokeObjectURL(url), 2000)
 }
 
+const drawable = (t: THREE.Texture | null | undefined) => {
+  const img = t?.image as unknown
+  return !!img && (img instanceof HTMLCanvasElement || img instanceof HTMLImageElement || img instanceof ImageBitmap || (typeof OffscreenCanvas !== 'undefined' && img instanceof OffscreenCanvas))
+}
+const safeCache = new Map<THREE.Material, THREE.Material>()
+/** GLTFExporter can only embed image-backed textures; rebuild materials with those only. */
+function gltfSafe(mat: THREE.Material | THREE.Material[]): THREE.Material | THREE.Material[] {
+  if (Array.isArray(mat)) return mat.map((x) => gltfSafe(x) as THREE.Material)
+  const hit = safeCache.get(mat)
+  if (hit) return hit
+  const src = mat as THREE.MeshStandardMaterial
+  const out = new THREE.MeshStandardMaterial({
+    color: src.color ?? new THREE.Color(0xffffff),
+    metalness: src.metalness ?? 0,
+    roughness: src.roughness ?? 1,
+    map: drawable(src.map) ? src.map : null,
+    transparent: src.transparent,
+    opacity: src.opacity,
+    alphaTest: src.alphaTest,
+    side: src.side,
+  })
+  safeCache.set(mat, out)
+  return out
+}
+
 /** Clone the board without helpers/decals, baked to world space in millimetres (Z-up for CAD). */
 function exportable(root: THREE.Object3D, forPrint: boolean) {
   const out = new THREE.Group()
@@ -26,10 +51,21 @@ function exportable(root: THREE.Object3D, forPrint: boolean) {
     if (!m.isMesh || !m.visible) return
     const mat = Array.isArray(m.material) ? m.material[0] : m.material
     if (forPrint && (mat as THREE.Material).transparent) return // drop decals/lenses for STL
-    const g = m.geometry.clone().applyMatrix4(m.matrixWorld)
-    const clone = new THREE.Mesh(g, m.material)
-    clone.name = (o.userData.ref as string) ?? o.name
-    out.add(clone)
+    const material = forPrint ? m.material : gltfSafe(m.material)
+    const name = (o.userData.ref as string) ?? o.name
+    const inst = o as THREE.InstancedMesh
+    const mats = inst.isInstancedMesh
+      ? Array.from({ length: inst.count }, (_, i) => {
+          const im = new THREE.Matrix4()
+          inst.getMatrixAt(i, im)
+          return new THREE.Matrix4().multiplyMatrices(m.matrixWorld, im)
+        })
+      : [m.matrixWorld]
+    for (const mw of mats) {
+      const clone = new THREE.Mesh(m.geometry.clone().applyMatrix4(mw), material)
+      clone.name = name
+      out.add(clone)
+    }
   })
   if (forPrint) out.rotation.x = Math.PI / 2 // Y-up scene → Z-up CAD
   out.updateMatrixWorld(true)

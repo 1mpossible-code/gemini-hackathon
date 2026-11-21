@@ -56,12 +56,13 @@ interface LeanError { line: number; msg: string }
 /** Parse `Generated.lean:LINE:COL: error: …` diagnostics (message runs to the next diagnostic). */
 export function parseErrors(log: string): LeanError[] {
   const errs: LeanError[] = []
-  const re = /Generated\.lean:(\d+):(\d+): (error|warning|info)(?:\([^)]*\))?: ?/g
+  // lake prints `error: Forge/Generated.lean:L:C: msg`; plain `lean` prints `Forge/Generated.lean:L:C: error: msg`
+  const re = /^(?:(error|warning|info)(?:\([^)]*\))?: )?\S*Generated\.lean:(\d+):(\d+): (?:(error|warning|info)(?:\([^)]*\))?: ?)?/gm
   const hits = [...log.matchAll(re)]
   hits.forEach((m, i) => {
-    if (m[3] !== 'error') return
+    if ((m[1] ?? m[4]) !== 'error') return
     const end = i + 1 < hits.length ? hits[i + 1].index! : log.length
-    errs.push({ line: Number(m[1]), msg: log.slice(m.index! + m[0].length, end).trim().split('\n').slice(0, 6).join('\n') })
+    errs.push({ line: Number(m[2]), msg: log.slice(m.index! + m[0].length, end).trim().split('\n').slice(0, 6).join('\n') })
   })
   return errs
 }

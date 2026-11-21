@@ -172,7 +172,7 @@ const int = (n: number) => (n < 0 ? `(${n})` : `${n}`)
 
 function parseOhms(v?: string): number | null {
   if (!v) return null
-  const m = /^(\d+(?:\.\d+)?)([RKkMm]?)(\d*)$/.exec(v.trim())
+  const m = /^(\d+(?:\.\d+)?)\s*([RKkMm]?)(\d*)\s*(?:Ω|ohms?)?$/i.exec(v.trim())
   if (!m) return null
   const mult = { '': 1, R: 1, k: 1e3, K: 1e3, m: 1e6, M: 1e6 }[m[2]] ?? 1
   const frac = m[3] ? Number(`0.${m[3]}`) : 0
@@ -262,7 +262,7 @@ export function buildCertificate(board: Board): Certificate {
         }
         supplies.push({ ref: p.ref, role: 'rating', rail, minMv: 0, maxMv: rating })
       }
-      if (rating != null) note(`Capacitor voltage ratings parsed from descriptions (e.g. "${m![0]}")`)
+      if (rating != null) note(`Capacitor voltage ratings parsed from part descriptions (e.g. "25 V")`)
     }
   }
 
@@ -281,8 +281,9 @@ export function buildCertificate(board: Board): Certificate {
     }
     const [rRef, rPin] = resPin.split('.')
     const r = partBy.get(rRef)!
-    const ohms = parseOhms(r.value)
-    if (!ohms) continue
+    // an unreadable value is certified as 0 Ω, so led_current_safe fails rather than skipping the LED
+    const ohms = parseOhms(r.value) ?? 0
+    if (!ohms) note(`${rRef} value "${r.value ?? ''}" is not a readable resistance; ${d.ref} treated as unlimited (fails led_current_safe)`)
     const other = `${rRef}.${rPin === '1' ? 2 : 1}`
     const srcNets = board.nets.filter((n) => n.path.includes(other))
     let src = ''
@@ -304,7 +305,7 @@ export function buildCertificate(board: Board): Certificate {
       note(`${other} (${d.ref} resistor) is not routed in the board data; assumed tied to +3V3`)
     }
     leds.push({ led: d.ref, res: rRef, srcMaxMv, ohms, srcMaxUa, src })
-    const ua = Math.ceil(((srcMaxMv - LED.vfMinMv) * 1000) / ohms)
+    const ua = ohms ? Math.ceil(((srcMaxMv - LED.vfMinMv) * 1000) / ohms) : 0
     const mA = Math.ceil(ua / 1000)
     loads.push({ ref: d.ref, rail: rail ?? (gpio ? (railOf.get(gpio.ref)?.get('VDD') ?? '+3V3') : '+3V3'), peakMa: mA, avgMa: mA })
   }
@@ -551,7 +552,7 @@ export function buildCertificate(board: Board): Certificate {
 
   if (leds.length) {
     thm('led_current_safe',
-      `LED current I = (V − Vf)/R: ${leds.map((d) => `${d.led} ≤ ${(((d.srcMaxMv - LED.vfMinMv) / d.ohms)).toFixed(2)} mA (${d.src}, ${d.ohms} Ω)`).join(', ')}; limits ${LED.maxUa / 1000} mA LED, ${LED.gpioMaxUa / 1000} mA GPIO`,
+      `LED current I = (V − Vf)/R: ${leds.map((d) => `${d.led} ≤ ${d.ohms ? ((d.srcMaxMv - LED.vfMinMv) / d.ohms).toFixed(2) : "∞"} mA (${d.src}, ${d.ohms} Ω)`).join(', ')}; limits ${LED.maxUa / 1000} mA LED, ${LED.gpioMaxUa / 1000} mA GPIO`,
       'Rules.LedsSafe board', via('LedsSafe'))
   }
 

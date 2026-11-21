@@ -117,13 +117,13 @@ theorem totalPeak_sublist {l m : List Load} (h : l.Sublist m) : totalPeak l ≤ 
   induction h with
   | slnil => exact Nat.le_refl _
   | cons a _ ih => simp only [totalPeak]; omega
-  | cons₂ a _ ih => simp only [totalPeak]; omega
+  | cons_cons a _ ih => simp only [totalPeak]; omega
 
 theorem totalAvg_sublist {l m : List Load} (h : l.Sublist m) : totalAvg l ≤ totalAvg m := by
   induction h with
   | slnil => exact Nat.le_refl _
   | cons a _ ih => simp only [totalAvg]; omega
-  | cons₂ a _ ih => simp only [totalAvg]; omega
+  | cons_cons a _ ih => simp only [totalAvg]; omega
 
 /-- Adding a load can only increase the sum. -/
 theorem totalPeak_cons_ge (a : Load) (l : List Load) : totalPeak l ≤ totalPeak (a :: l) := by
@@ -173,7 +173,7 @@ theorem thermal_mono {vin vin' vout i i' θ : Nat} (hv : vin ≤ vin') (hi : i �
 high is read as high, a guaranteed low as low, the receiver's thresholds are
 well-formed, and the driver never exceeds the receiver's absolute maximum. -/
 def Compat (d r : Family) : Prop :=
-  r.vil < r.vih ∧ r.vih ≤ d.voh ∧ d.vol ≤ r.vil ∧ d.vpeak ≤ r.vabs
+  r.vil < r.vih ∧ r.vih ≤ d.voh ∧ d.vol ≤ r.vil ∧ d.voh ≤ d.vpeak ∧ d.vpeak ≤ r.vabs
 
 instance (d r : Family) : Decidable (Compat d r) := by unfold Compat; infer_instance
 
@@ -194,7 +194,8 @@ theorem compat_read {d r : Family} (h : Compat d r) (b : Bool) (v : Nat)
     simp [h1, h2]; omega
 
 /-- Driver `d'` is at least as strong as `d`. -/
-def Dominates (d' d : Family) : Prop := d.voh ≤ d'.voh ∧ d'.vol ≤ d.vol ∧ d'.vpeak ≤ d.vpeak
+def Dominates (d' d : Family) : Prop :=
+  d.voh ≤ d'.voh ∧ d'.vol ≤ d.vol ∧ d'.voh ≤ d'.vpeak ∧ d'.vpeak ≤ d.vpeak
 
 theorem compat_of_dominates {d d' r : Family} (hd : Dominates d' d) (h : Compat d r) :
     Compat d' r := by
@@ -328,7 +329,7 @@ def EdgeClearance : Prop :=
   (∀ p ∈ b.parts, ∀ d ∈ p.pads, (p.padBox d).Within (b.outline.inflate (-(b.rules.edgeClear : Int))))
 
 def AnnularRing : Prop :=
-  ∀ p ∈ b.parts, ∀ d ∈ p.pads, 0 < d.drill → d.drill + 2 * b.rules.minRing ≤ min d.w d.h
+  ∀ p ∈ b.parts, ∀ d ∈ p.pads, d.drill = 0 ∨ d.drill + 2 * b.rules.minRing ≤ min d.w d.h
 
 /-! ### Checkers -/
 
@@ -362,7 +363,7 @@ def checkEdgeClearance : Bool :=
     decide ((Box.around v (halfUp c.width) (halfUp c.width)).Within (b.outline.inflate (-(b.rules.edgeClear : Int))))) &&
   (b.parts.all fun p => p.pads.all fun d => decide ((p.padBox d).Within (b.outline.inflate (-(b.rules.edgeClear : Int)))))
 def checkAnnularRing : Bool :=
-  b.parts.all fun p => p.pads.all fun d => decide (0 < d.drill → d.drill + 2 * b.rules.minRing ≤ min d.w d.h)
+  b.parts.all fun p => p.pads.all fun d => decide (d.drill = 0 ∨ d.drill + 2 * b.rules.minRing ≤ min d.w d.h)
 
 /-! ### Checker soundness and completeness -/
 
@@ -375,9 +376,9 @@ theorem checkMinWidth_iff : checkMinWidth b = true ↔ MinWidth b := by
 theorem checkTraceClearance_iff : checkTraceClearance b = true ↔ TraceClearance b :=
   pairwiseB_decide_iff _ _
 theorem checkNetsConnected_iff : checkNetsConnected b = true ↔ NetsConnected b := by
-  simp [checkNetsConnected, NetsConnected, List.isEmpty_iff]
+  simp [checkNetsConnected, NetsConnected]
 theorem checkUniquePinNets_iff : checkUniquePinNets b = true ↔ UniquePinNets b := by
-  simp [checkUniquePinNets, UniquePinNets]
+  simp [checkUniquePinNets, UniquePinNets, Decidable.imp_iff_not_or]
 theorem checkPowerBudget_iff : checkPowerBudget b = true ↔ PowerBudget b := by
   simp [checkPowerBudget, PowerBudget]
 theorem checkRailsCompatible_iff : checkRailsCompatible b = true ↔ RailsCompatible b := by
@@ -387,7 +388,7 @@ theorem checkLogicCompatible_iff : checkLogicCompatible b = true ↔ LogicCompat
 theorem checkLedsSafe_iff : checkLedsSafe b = true ↔ LedsSafe b := by
   simp [checkLedsSafe, LedsSafe]
 theorem checkThermalOk_iff : checkThermalOk b = true ↔ ThermalOk b := by
-  simp [checkThermalOk, ThermalOk]
+  simp [checkThermalOk, ThermalOk, and_assoc]
 theorem checkAmpacity_iff : checkAmpacity b = true ↔ Ampacity b := by
   simp [checkAmpacity, Ampacity]
 theorem checkEdgeClearance_iff : checkEdgeClearance b = true ↔ EdgeClearance b := by
@@ -429,10 +430,10 @@ theorem traceClearance_symm (h : TraceClearance b) (i j : Nat) (hi : i < b.segs.
     b.segs[i].net ≠ b.segs[j].net → b.segs[i].layer = b.segs[j].layer →
       segClear b.segs[i] b.segs[j] (clearReq b b.segs[i] b.segs[j]) = true := by
   refine pairwise_symm_getElem (R := fun s t => s.net ≠ t.net → s.layer = t.layer →
-      segClear s t (clearReq b s t) = true) ?_ h i j hi hj hne
+      segClear s t (clearReq b s t) = true) ?_ (by unfold TraceClearance at h; exact h) i j hi hj hne
   intro s t hst hn hl
   have : clearReq b t s = clearReq b s t := by unfold clearReq; rw [Nat.add_comm]
-  rw [segClear_symm, ← this]
+  rw [segClear_symm, this]
   exact hst (Ne.symm hn) hl.symm
 
 end Rules

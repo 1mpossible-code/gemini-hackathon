@@ -267,7 +267,7 @@ def Gate.eval (env : Nat → Bool) : Gate → Bool
   | .and a b => a.eval env && b.eval env
   | .or a b => a.eval env || b.eval env
 
-/-- TB6612FNG control logic for one H-bridge channel, per the datasheet truth
+/- TB6612FNG control logic for one H-bridge channel, per the datasheet truth
 table. Inputs: `0 = IN1`, `1 = IN2`, `2 = PWM`, `3 = STBY`.
 Each output half-bridge has a high-side and a low-side switch enable.
 

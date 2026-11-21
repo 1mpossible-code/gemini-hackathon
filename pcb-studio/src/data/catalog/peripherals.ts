@@ -324,7 +324,7 @@ export const peripherals: CatalogItem[] = [
     manufacturer: 'STMicroelectronics',
     mpn: 'VL53L0X',
     description:
-      'Time-of-flight distance sensor, about 30–2000? mm depending on target and mode, realistically useful to around 1.2 m indoors. I2C, default 0x29. IC is 2.6–3.5 V; breakouts often accept 3.3–5 V.',
+      'Time-of-flight distance sensor. The datasheet range is about 30 mm to 2 m; indoors, against a typical target, it is useful to around 1.2 m. I2C, default 0x29. The IC is 2.6–3.5 V; breakouts often accept 3.3–5 V.',
     tags: ['vl53l0x', 'tof', 'distance', 'lidar'],
     interfaces: ['i2c'],
     voltage: { min: 2.6, max: 5.0, logic: 3.3 },
@@ -408,7 +408,7 @@ export const peripherals: CatalogItem[] = [
     manufacturer: 'Texas Instruments',
     mpn: 'INA219AIDCNR',
     description:
-      'High-side current and voltage monitor, I2C, 0–26 V bus. The SOT-23-8? No: the common IC is SOT-23 or SOIC; GY boards use a 0.1 Ω shunt and report current, bus voltage and power. Addresses 0x40–0x4F.',
+      'High-side current and voltage monitor, I2C, 0–26 V bus. INA219AIDCNR is the SOT-23-8 part. GY breakouts use a 0.1 Ω shunt and report current, bus voltage and power. Addresses 0x40–0x4F.',
     tags: ['ina219', 'current', 'power', 'shunt'],
     interfaces: ['i2c'],
     voltage: { min: 3.0, max: 5.5, logic: 3.3 },
@@ -1598,7 +1598,7 @@ export const peripherals: CatalogItem[] = [
     currentMa: 8,
     dimensions: { w: 6.5, h: 3.5, thickness: 1.8 },
     pins: [
-      { name: 'GND', fn: 'Pin 1, tab is also Vout on the fixed version? No: pin 1 GND, pin 2 Vout, pin 3 Vin, tab Vout' },
+      { name: 'GND', fn: 'Pin 1' },
       { name: 'VOUT', fn: 'Pin 2 and the tab, 3.3 V' },
       { name: 'VIN', fn: 'Pin 3' },
     ],
