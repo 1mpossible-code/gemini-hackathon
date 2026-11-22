@@ -1,22 +1,24 @@
 // POST /api/chassis: Gemini designs the mechanical body for any product as a list
 // of primitive solids. The studio renders them with three.js. No recipe per product.
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { createHash } from 'node:crypto'
 import { callGemini, MODELS, resolveApiKey } from './gemini.ts'
 import { readJson, sendJson } from './http.ts'
+import { hasBuiltInBody } from '../src/data/bodyPolicy.ts'
 
 const SHAPES = ['box', 'cyl', 'ring', 'sphere'] as const
 const MATS = ['metal', 'plastic', 'rubber', 'carbon', 'clear'] as const
 
 const SYSTEM = `You are a mechanical designer. Model the physical body of the requested product as primitive solids for a 3D viewer.
 Units are millimetres. y is up. The product is centred on the origin. Real-world proportions.
-A custom PCB lies flat, centred at the origin, at the given height. Listed devices sit at given x,z positions. Build the body around them: do not bury the PCB inside a closed solid, leave the top open or use 'clear' covers.
+A custom PCB lies flat, centred at the origin, at the given height. Listed catalog devices already have existing catalog meshes at the given positions; do not duplicate or redesign them. Add custom mechanical peripherals (guides, handles, brackets, tooling) when the brief calls for them. Build the body around them: do not bury the PCB inside a closed solid, leave the top open or use 'clear' covers.
 Shapes:
 - box: size = [width x, height y, depth z]
 - cyl: size = [radius, height, 0], axis along y before rotation
 - ring: size = [ring radius, tube radius, 0], lies in the x-y plane (faces z) before rotation
 - sphere: size = [radius, 0, 0]
 rot is [x, y, z] in degrees. Set spin true only for parts that rotate in use (rotors, wheels, fans).
-Model what makes the product recognisable: frame, shell walls, arms, wheels, legs, lenses, straps, handles, nozzles. Use 12 to 60 parts. Keep everything within 400 mm of the origin.`
+Model what makes the product recognisable: frame, shell walls, arms, wheels, legs, lenses, straps, handles, nozzles. Prefer 12 to 32 parts, maximum 60. Omit unnecessary detail. Keep everything within 400 mm of the origin.`
 
 const num3 = { type: 'ARRAY', items: { type: 'NUMBER' }, minItems: 3, maxItems: 3 }
 const SCHEMA = {
@@ -25,6 +27,7 @@ const SCHEMA = {
     name: { type: 'STRING' },
     parts: {
       type: 'ARRAY',
+      maxItems: 60,
       items: {
         type: 'OBJECT',
         properties: {
@@ -59,13 +62,27 @@ export function cleanParts(raw: unknown) {
     const size = vec(p?.size, 800)
     const pos = vec(p?.pos, 600)
     if (!shape || !mat || !size || !pos || size[0] <= 0) continue
+    if (shape !== 'sphere' && size[1] <= 0) continue
+    if (shape === 'box' && size[2] <= 0) continue
+    if (shape === 'ring' && size[1] >= size[0]) continue
     parts.push({ shape, mat, size, pos, rot: vec(p?.rot, 360) ?? undefined, spin: p?.spin === true || undefined })
   }
   return parts
 }
 
 export function chassisHandler(env: () => Record<string, string | undefined>, log: (m: string) => void) {
+  type Result = { parts: ReturnType<typeof cleanParts>; reason?: string }
+  // Bound memory and reuse successes only. Include credentials to isolate callers.
+  const cache = new Map<string, { result: Result; expires: number }>()
+  const pending = new Map<string, Promise<Result>>()
   return async (req: IncomingMessage, res: ServerResponse) => {
+    const started = performance.now()
+    res.setHeader('cache-control', 'no-store')
+    const reply = (result: Result, source: string) => {
+      res.setHeader('server-timing', `chassis;dur=${(performance.now() - started).toFixed(1)}`)
+      res.setHeader('x-forge-chassis-cache', source)
+      return sendJson(res, 200, result)
+    }
     if (req.method !== 'POST') return sendJson(res, 405, { type: 'error', message: 'Use POST' })
     let body: Record<string, unknown>
     try {
@@ -75,19 +92,44 @@ export function chassisHandler(env: () => Record<string, string | undefined>, lo
     }
     const prompt = typeof body?.prompt === 'string' ? body.prompt.trim().slice(0, 2000) : ''
     if (!prompt) return sendJson(res, 400, { type: 'error', message: 'prompt is required' })
+    // Preserve built-ins even for callers outside the studio UI.
+    if (hasBuiltInBody(prompt)) return sendJson(res, 200, { parts: [], reason: 'built-in' })
     const sent = req.headers['x-gemini-key']
     const apiKey = (typeof sent === 'string' && /^[\w-]{20,200}$/.test(sent) ? sent : '') || resolveApiKey(env())
     if (!apiKey) return sendJson(res, 200, { parts: [], reason: 'no-key' })
     const layout = typeof body.layout === 'string' ? body.layout.slice(0, 3000) : ''
+    const config = env()
+    const model = config.GEMINI_CHASSIS_MODEL || config.GEMINI_FAST_MODEL || MODELS.carbon
+    const key = createHash('sha256').update(JSON.stringify([apiKey, model, prompt, layout])).digest('hex')
+    const hit = cache.get(key)
+    if (hit && hit.expires > Date.now()) return reply(hit.result, 'hit')
+    cache.delete(key)
+    const existing = pending.get(key)
+    if (existing) return reply(await existing, 'shared')
+    if (pending.size >= 3) return reply({ parts: [], reason: 'busy' }, 'miss')
+    const job = (async (): Promise<Result> => {
+      try {
+        // One attempt within a total deadline: retries must not leave previews waiting minutes.
+        const raw = await callGemini(apiKey, { model, system: SYSTEM, prompt: `Product: ${prompt}\n\n${layout}`, schema: SCHEMA, timeoutMs: 20_000, signal: AbortSignal.timeout(20_000), maxAttempts: 1 })
+        const parts = cleanParts(raw)
+        log(`chassis: ${parts.length} parts`)
+        const result = { parts, ...(parts.length ? {} : { reason: 'invalid-geometry' }) }
+        if (parts.length) {
+          if (cache.size >= 128) cache.delete(cache.keys().next().value!)
+          cache.set(key, { result, expires: Date.now() + 30 * 60_000 })
+        }
+        return result
+      } catch (e) {
+        const why = e instanceof Error ? e.message : String(e)
+        log(`chassis failed (${why})`)
+        return { parts: [], reason: why.slice(0, 200) }
+      }
+    })()
+    pending.set(key, job)
     try {
-      const raw = await callGemini(apiKey, { model: MODELS.argon, system: SYSTEM, prompt: `Product: ${prompt}\n\n${layout}`, schema: SCHEMA, timeoutMs: 90_000 })
-      const parts = cleanParts(raw)
-      log(`chassis: ${parts.length} parts`)
-      return sendJson(res, 200, { parts })
-    } catch (e) {
-      const why = e instanceof Error ? e.message : String(e)
-      log(`chassis failed (${why})`)
-      return sendJson(res, 200, { parts: [], reason: why.slice(0, 200) })
+      return reply(await job, 'miss')
+    } finally {
+      pending.delete(key)
     }
   }
 }

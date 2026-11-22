@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import json
 import logging
 import os
@@ -22,7 +23,18 @@ from google.genai.errors import APIError
 from pydantic import BaseModel, Field, ValidationError
 
 from .bom import compute_cost_breakdown, format_minor_currency
+from .agents.swarm import SwarmReport, run_swarm, swarm_available, swarm_model
 from .catalog import PARTS, ResearchError
+from .evidence.datasheets import (
+    ComponentEvidence, EvidenceBlocked, EvidenceRegistry, documents_for, evidence_registry,
+    require_design_evidence, require_cached_design_evidence,
+)
+from .providers.keys import KeyUpdate, forget_saved_keys, integrations_status, load_saved_keys, update_keys
+from .providers.llm import live_model
+from .engineering_handoff import handoff_router
+from .providers.gemini_models import list_gemini_models
+from .providers.usage import UsageSummary, usage_summary
+from .providers import modal_cad
 from .geometry import (
     AssemblyManifest,
     AssemblyParameters,
@@ -62,6 +74,9 @@ from .repair import (
 )
 from .verify import find_lean_binary, verify_design, verify_design_sync
 from .workflow import Progress, run_research, stage_event
+from .validation import ValidationReport, validate_report
+from .source_research import SourcePolicy, SourceResearch, research_sources, admitted_evidence, require_admitted_evidence
+from .validation_html import render_validation_html
 
 WEB = Path(__file__).with_name("web")
 logger = logging.getLogger(__name__)
@@ -141,6 +156,7 @@ app.add_middleware(AlwaysFresh)
 class ResearchRequest(BaseModel):
     mode: Literal["live", "sample"]
     brief: str = Field(default="", max_length=4000)
+    source_policy: SourcePolicy = Field(default_factory=SourcePolicy)
 
 
 class Prototype(BaseModel):
@@ -152,9 +168,15 @@ class Prototype(BaseModel):
 
 
 class StudioReport(ResearchReport):
+    research_id: UUID = Field(default_factory=uuid4)
     prototype: Prototype | None = None
     prototype_error: str | None = None
+    evidence_blocked: bool = False
+    evidence: list[ComponentEvidence] = Field(default_factory=list)
     project: ProjectView | None = None
+    swarm: SwarmReport | None = None
+    source_research: SourceResearch | None = None
+    compute: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class AssemblyEdit(BaseModel):
@@ -175,7 +197,7 @@ class RepairRequest(BaseModel):
 class RepairResponse(BaseModel):
     repaired: bool
     attempts: int
-    actor: Literal["gemini", "offline_fixture"]
+    actor: Literal["gemini", "nous", "offline_fixture"]
     rationale: str
     diff: RevisionDiff | None = None
     project: ProjectView
@@ -201,6 +223,9 @@ class OfferSelectionRequest(BaseModel):
 
 
 projects: OrderedDict[UUID, ManagedProject] = OrderedDict()
+research_runs: OrderedDict[UUID, StudioReport] = OrderedDict()
+app.include_router(handoff_router(lambda: research_runs))
+validation_runs: OrderedDict[UUID, ValidationReport] = OrderedDict()
 _project_locks: dict[UUID, asyncio.Lock] = {}
 
 
@@ -230,6 +255,9 @@ def publish_prototype(
     *,
     progress: Progress | None = None,
 ) -> Prototype:
+    if report.mode != "offline":
+        require_admitted_evidence(report, report.review.selected_parts)
+        require_cached_design_evidence(report.review.selected_parts)
     specification, snapshot = initial_spec_from_report(report, parameters)
     if progress is not None:
         progress(
@@ -319,7 +347,7 @@ def publish_prototype(
     )
 
     if existing is None:
-        actor_mode = "offline_fixture" if report.mode == "offline" else "gemini"
+        actor_mode = "offline_fixture" if report.mode == "offline" else report.mode
         activity = [
             ActivityEntry(
                 timestamp=now,
@@ -410,10 +438,15 @@ def require_current_project(project_id: UUID, revision: int) -> ManagedProject:
     return project
 
 
+LIVE_UNAVAILABLE = (
+    "Live research needs Gemini configured on the server. You can run the offline sample."
+)
+
+
 def configured_model() -> str | None:
-    model = os.getenv("FORGE_GEMINI_MODEL", "").strip()
-    has_key = any(os.getenv(name, "").strip() for name in ("GEMINI_API_KEY", "GOOGLE_API_KEY"))
-    return model if has_key and model.startswith("gemini-") else None
+    """Name of the configured Gemini research model, if any."""
+    live = live_model()
+    return live.name if live else None
 
 
 @app.get("/")
@@ -450,22 +483,107 @@ def pcb_url() -> str:
     return written or "http://localhost:5173/"
 
 
+ACTOR_LABELS = {"gemini": "Gemini", "nous": "Nous", "offline_fixture": "Offline fixture"}
+load_saved_keys()
+
+
+@app.get("/api/integrations")
+def integrations() -> dict[str, Any]:
+    """Which providers are configured. Never returns key values."""
+    return integrations_status()
+
+
+@app.post("/api/integrations")
+def set_integrations(update: KeyUpdate) -> dict[str, Any]:
+    """Store provider keys in server memory (optionally on local disk).
+
+    Keys never go to the browser bundle or back out of this endpoint.
+    """
+    status = update_keys(update)
+    evidence_registry.clear()  # re-read datasheets with the new Reducto key
+    return status
+
+
+class GeminiModelsRequest(BaseModel):
+    gemini_api_key: str | None = Field(default=None, max_length=512)
+
+
+@app.post("/api/integrations/gemini-models")
+async def gemini_models(request: GeminiModelsRequest) -> dict[str, Any]:
+    """Use an entered or saved key to list models without changing configuration."""
+    return await list_gemini_models(request.gemini_api_key)
+
+
+@app.delete("/api/integrations/saved")
+def forget_integrations() -> dict[str, Any]:
+    """Delete the remembered-keys file. Keys stay set for this server process."""
+    forget_saved_keys()
+    return integrations_status()
+
+
+@app.get("/api/providers/usage")
+def provider_usage() -> UsageSummary:
+    return usage_summary()
+
+
 @app.get("/api/session")
 def session() -> dict[str, Any]:
-    model = configured_model()
+    live = live_model()
     return {
-        "live": model is not None,
-        "gemini_model": model,
+        "live": live is not None,
+        "provider": live.mode if live else None,
+        "gemini_model": live.name if live and live.mode == "gemini" else None,
+        "live_model": live.name if live else None,
+        "integrations": integrations_status(),
         "lean_available": find_lean_binary() is not None,
         "shop_mcp_enabled": True,
         "sample_brief": DEMO_BRIEF,
         "pcb_url": pcb_url(),
+        "swarm": {"enabled": swarm_available(), "model": swarm_model()},
     }
 
 
 @app.get("/api/catalog")
 def catalog() -> dict[str, Any]:
     return {"parts": [part.model_dump(mode="json") for part in PARTS]}
+
+
+PARTS_BY_ID = {part.id: part for part in PARTS}
+
+
+class EvidenceIndex(BaseModel):
+    reducto_enabled: bool
+    parts: dict[str, str]
+    documents: dict[str, int]
+    started: int
+
+
+@app.exception_handler(EvidenceBlocked)
+async def evidence_blocked_response(request, error: EvidenceBlocked):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(status_code=422, content={"detail": str(error)})
+
+
+@app.get("/api/evidence")
+async def evidence_index() -> EvidenceIndex:
+    """Status of every catalog part's evidence bundle; starts reading any not yet read."""
+    from .providers.reducto import reducto_api_key
+
+    started = evidence_registry.prefetch(PARTS)
+    return EvidenceIndex(
+        reducto_enabled=reducto_api_key() is not None,
+        parts=evidence_registry.status(),
+        documents={part.id: len(documents_for(part)) for part in PARTS},
+        started=started,
+    )
+
+
+@app.get("/api/evidence/{part_id}")
+async def part_evidence(part_id: str) -> ComponentEvidence:
+    part = PARTS_BY_ID.get(part_id)
+    if part is None:
+        raise HTTPException(404, f"Unknown catalog part '{part_id}'.")
+    return await evidence_registry.get(part)
 
 
 @app.post("/api/research")
@@ -476,6 +594,37 @@ async def research(request: ResearchRequest) -> StudioReport:
 async def run_studio_research(
     request: ResearchRequest, progress: Progress | None = None
 ) -> StudioReport:
+    # The Gemini agent swarm runs beside the catalog workflow and streams its own
+    # events; it is advisory and never blocks or overrides the validated path.
+    swarm_task: asyncio.Task[SwarmReport] | None = None
+    if request.mode == "sample" or request.brief.strip():
+        swarm_task = asyncio.create_task(
+            run_swarm(
+                DEMO_BRIEF if request.mode == "sample" else request.brief,
+                live=request.mode == "live",
+                emit=progress,
+            )
+        )
+    try:
+        result = await _run_catalog_research(request, progress)
+    except BaseException:
+        if swarm_task is not None:
+            swarm_task.cancel()
+        raise
+    if swarm_task is not None:
+        try:
+            result.swarm = await swarm_task
+        except asyncio.CancelledError:
+            result.swarm = None
+    research_runs[result.research_id] = result.model_copy(deep=True)
+    if len(research_runs) > 32:
+        research_runs.popitem(last=False)
+    return result
+
+
+async def _run_catalog_research(
+    request: ResearchRequest, progress: Progress | None
+) -> StudioReport:
     try:
         if request.mode == "sample":
             report = await run_research(
@@ -484,15 +633,12 @@ async def run_studio_research(
         else:
             if not request.brief.strip():
                 raise HTTPException(422, "Enter a design brief.")
-            model = configured_model()
-            if model is None:
-                raise HTTPException(
-                    503,
-                    "Live research needs Gemini configured on the server. You can run the offline sample.",
-                )
-            os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = "false"
-            os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "false"
-            report = await run_research(request.brief, model, mode="gemini", progress=progress)
+            live = live_model()
+            if live is None:
+                raise HTTPException(503, LIVE_UNAVAILABLE)
+            report = await run_research(
+                request.brief, live.adk_model(), mode=live.mode, progress=progress
+            )
     except ResearchError as error:
         raise HTTPException(
             502, "Research could not finish. Try again or run the sample."
@@ -515,13 +661,60 @@ async def run_studio_research(
         raise HTTPException(502, message) from error
 
     result = StudioReport(**report.model_dump())
+    if request.mode == "live":
+        if progress is not None:
+            progress(stage_event("evidence", "running", detail="Researching manufacturer sources; parsing and Pangram scanning run in parallel."))
+        result.source_research = await research_sources(request.brief, report.review.selected_parts, request.source_policy, emit=progress)
+        if request.source_policy.enabled and result.source_research.status != "accepted":
+            result.evidence_blocked = True
+            result.prototype_error = "Source-admission policy needs review. " + " ".join(result.source_research.reasons)
+            if progress is not None:
+                progress(stage_event("evidence", "failed", detail=result.prototype_error))
+                progress(stage_event("geometry", "skipped", detail="No admitted research source set."))
+                progress(stage_event("export", "skipped", detail="Source policy blocked the build."))
+            return result
+        if request.source_policy.enabled:
+            for part in report.review.selected_parts:
+                evidence_registry.seed(part, admitted_evidence(part, result.source_research))
     if report.review.status == "candidate":
         pid = uuid4()
         try:
-            result.prototype = publish_prototype(report, pid, 1, progress=progress)
+            if report.mode != "offline":
+                if progress is not None:
+                    progress(stage_event("evidence", "running", detail="Comparing independent Reducto and Gemini PDF reads."))
+                result.evidence = await asyncio.gather(*(evidence_registry.get(part) for part in report.review.selected_parts))
+                await require_design_evidence(report.review.selected_parts)
+                if progress is not None:
+                    progress(stage_event("evidence", "completed", detail="Critical datasheet evidence agrees."))
+            started = time.monotonic()
+            if progress is not None:
+                progress(modal_cad.compute_event(
+                    "local-assembly", "provision", provider="local", label="Local assembly worker",
+                    function="build_assembly + export_glb", resources=modal_cad.LOCAL_RESOURCES,
+                    detail="Parametric assembly on this server."))
+            result.prototype = publish_prototype(result, pid, 1, progress=progress)
+            local_stats = {
+                "elapsed_s": round(time.monotonic() - started, 2),
+                "nodes": len(result.prototype.manifest.nodes),
+                "bytes": {"glb": len(projects[pid].current.glb or b"")},
+            }
+            result.compute.append({"job": "local-assembly", "provider": "local", "stats": local_stats})
+            if progress is not None:
+                progress(modal_cad.compute_event("local-assembly", "completed", provider="local", stats=local_stats,
+                                                 glb_url=result.prototype.glb_url, detail="Assembly GLB ready."))
+            await _run_modal_enclosure(result, pid, progress)
+            # Read every candidate's documents now, including alternates the
+            # user has not picked yet, so a part swap shows evidence at once.
+            evidence_registry.prefetch(PARTS)
             result.project = build_project_view(projects[pid])
-        except GeometryError as error:
+        except (GeometryError, EvidenceBlocked) as error:
             result.prototype_error = str(error)
+            if isinstance(error, EvidenceBlocked):
+                result.evidence_blocked = True
+                if progress is not None:
+                    progress(stage_event("evidence", "failed", detail=str(error)))
+                    progress(stage_event("geometry", "skipped", detail="Critical datasheet evidence needs review."))
+                    progress(stage_event("export", "skipped", detail="Build blocked by unverified evidence."))
     elif progress is not None:
         progress(
             stage_event(
@@ -530,6 +723,41 @@ async def run_studio_research(
         )
         progress(stage_event("export", "skipped", detail="No validated assembly to export."))
     return result
+
+
+modal_enclosures: dict[UUID, bytes] = {}
+
+
+async def _run_modal_enclosure(result: StudioReport, pid: UUID, progress: Progress | None) -> None:
+    """CadQuery enclosure: Modal first, this machine if Modal fails. Never fails research."""
+    if os.getenv("FORGE_ENCLOSURE", "on").strip().lower() in ("0", "off", "false"):
+        return
+    try:
+        mech = projects[pid].current.spec.mechanical
+        spec = modal_cad.enclosure_spec(result.review.selected_parts, mech.wall_mm, mech.clearance_mm, f"forge-{pid.hex[:8]}")
+        loop = asyncio.get_running_loop()
+        emit = None if progress is None else (lambda event: loop.call_soon_threadsafe(progress, event))
+        job = await asyncio.to_thread(modal_cad.generate_enclosure, spec, emit)
+    except Exception as error:  # report, never fail research on the optional cloud job
+        result.compute.append({"job": "enclosure", "provider": "none", "error": str(error)[:300]})
+        return
+    if glb := job["files"].get("glb"):
+        modal_enclosures[pid] = glb
+        while len(modal_enclosures) > 32:
+            modal_enclosures.pop(next(iter(modal_enclosures)))
+    glb_url = f"/api/prototypes/{pid}/enclosure.glb" if glb else None
+    result.compute.append({"job": "enclosure", "provider": job["provider"], "stats": job["stats"], "glb_url": glb_url})
+    if progress is not None and glb_url:
+        progress(modal_cad.compute_event("enclosure", "ready", provider=job["provider"], glb_url=glb_url,
+                                         detail=f"Enclosure GLB from the {job['provider']} worker."))
+
+
+@app.get("/api/prototypes/{project_id}/enclosure.glb")
+async def get_enclosure(project_id: UUID) -> Response:
+    glb = modal_enclosures.get(project_id)
+    if glb is None:
+        raise HTTPException(404, "No generated enclosure for this prototype.")
+    return Response(glb, media_type="model/gltf-binary")
 
 
 async def research_events(request: ResearchRequest) -> AsyncIterator[str]:
@@ -611,6 +839,74 @@ async def revise_prototype(project_id: UUID, edit: AssemblyEdit) -> Prototype:
                 else "Enter a supported wrist size."
             )
             raise HTTPException(422, message) from error
+
+
+class ValidationRequest(BaseModel):
+    base_revision: int = Field(ge=1)
+
+
+def _store_validation(report: ValidationReport) -> ValidationReport:
+    validation_runs[report.validation_id] = report
+    if len(validation_runs) > 64:
+        validation_runs.popitem(last=False)
+    return report
+
+
+def _advisory_text(report: StudioReport) -> str:
+    if report.swarm is None:
+        return ""
+    return "\n\n".join([report.swarm.synthesis or "", *(a.summary for a in report.swarm.agents)])
+
+
+@app.post("/api/research/{research_id}/validate", response_model=ValidationReport)
+async def validate_research_run(research_id: UUID) -> ValidationReport:
+    report = research_runs.get(research_id)
+    if report is None:
+        raise HTTPException(404, "Research run expired. Run research again before validating.")
+    # No client-supplied report, claims or proof status can become audit evidence.
+    parts = report.review.selected_parts
+    spec = cost = None
+    if len(parts) >= 2:
+        try:
+            spec, snapshot = initial_spec_from_report(report)
+            cost = compute_cost_breakdown(1, spec, snapshot)
+        except (GeometryError, ValueError):
+            spec = cost = None
+    return _store_validation(await validate_report(
+        report, registry=EvidenceRegistry(), parts=parts, spec=spec, cost=cost,
+        revision=None, advisory=_advisory_text(report),
+    ))
+
+
+@app.post("/api/projects/{project_id}/validate", response_model=ValidationReport)
+async def validate_project_revision(project_id: UUID, request: ValidationRequest) -> ValidationReport:
+    async with _lock_for(project_id):
+        project = require_current_project(project_id, request.base_revision)
+        record = project.current
+        parts = [project.catalog_snapshot[cid] for cid in dict.fromkeys(c.catalog_id for c in record.spec.components)]
+        report = project.report.model_copy(deep=True, update={"catalog_snapshot": project.catalog_snapshot})
+        return _store_validation(await validate_report(
+            report, registry=EvidenceRegistry(), parts=parts, spec=record.spec, cost=record.cost,
+            revision=record.revision,
+        ))
+
+
+@app.get("/api/validations/{validation_id}")
+async def validation_json(validation_id: UUID) -> Response:
+    report = validation_runs.get(validation_id)
+    if report is None:
+        raise HTTPException(404, "Validation report expired. Validate again to create a new report.")
+    return Response(report.model_dump_json(indent=2), media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="forge-validation-{validation_id}.json"'})
+
+
+@app.get("/api/validations/{validation_id}/report.html")
+async def validation_html(validation_id: UUID) -> Response:
+    report = validation_runs.get(validation_id)
+    if report is None:
+        raise HTTPException(404, "Validation report expired. Validate again to create a new report.")
+    return Response(render_validation_html(report), media_type="text/html",
+                    headers={"Content-Disposition": f'attachment; filename="forge-validation-{validation_id}.html"'})
 
 
 @app.get("/api/projects/{project_id}")
@@ -727,25 +1023,24 @@ async def repair_project(project_id: UUID, req: RepairRequest) -> RepairResponse
             return RepairResponse(
                 repaired=True,
                 attempts=0,
-                actor="gemini" if req.mode == "live" else "offline_fixture",
+                actor=(live_model().mode if live_model() else "gemini") if req.mode == "live" else "offline_fixture",
                 rationale="All checkable constraints already pass; no repair required.",
                 diff=None,
                 project=build_project_view(project),
             )
 
-        gem_model = configured_model()
+        live = live_model()
         effective_mode: Literal["live", "sample"] = req.mode
-        if req.mode == "live" and gem_model is None:
+        if req.mode == "live" and live is None:
             raise HTTPException(
                 503,
-                "Live Gemini repair needs GEMINI_API_KEY and FORGE_GEMINI_MODEL configured. "
+                "Live repair needs GEMINI_API_KEY with FORGE_GEMINI_MODEL configured. "
                 "Use Offline scripted repair to test locally.",
             )
         if effective_mode == "live":
-            os.environ["GOOGLE_GENAI_USE_ENTERPRISE"] = "false"
-            os.environ["GOOGLE_GENAI_USE_VERTEXAI"] = "false"
-
-        model, actor = choose_repair_model(effective_mode, gem_model)
+            model, actor = live.adk_model(), live.mode
+        else:
+            model, actor = choose_repair_model(effective_mode, None)
         start_record = project.current
         working_spec = start_record.spec.model_copy(deep=True)
         working_failed = failed
@@ -773,7 +1068,7 @@ async def repair_project(project_id: UUID, req: RepairRequest) -> RepairResponse
                         revision=project.current_revision,
                         actor=actor,
                         kind="repair_unresolvable",
-                        title=f"Repair halted ({'Gemini' if actor == 'gemini' else 'Offline fixture'})",
+                        title=f"Repair halted ({ACTOR_LABELS.get(actor, actor)})",
                         detail=patch.rationale,
                         status="warn",
                     )
@@ -813,7 +1108,7 @@ async def repair_project(project_id: UUID, req: RepairRequest) -> RepairResponse
                 committed = await evaluate_and_commit_revision(
                     project,
                     candidate_spec,
-                    label=f"Auto-repaired ({'Gemini' if actor == 'gemini' else 'Offline fixture'})",
+                    label=f"Auto-repaired ({ACTOR_LABELS.get(actor, actor)})",
                     actor=actor,
                     force_verify=True,
                 )

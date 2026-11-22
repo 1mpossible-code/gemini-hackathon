@@ -16,6 +16,8 @@ from forge_research.procurement import search_part_offers_sync
 from forge_research.studio import app, projects
 from forge_research.verify import _ObligationSpec, _build_lean_file, verify_design_sync
 
+os.environ.setdefault("FORGE_ENCLOSURE", "off")  # skip the CadQuery enclosure job in fast tests
+
 
 class EngineeringStudioScenarioTests(unittest.TestCase):
     def setUp(self):
@@ -23,7 +25,7 @@ class EngineeringStudioScenarioTests(unittest.TestCase):
         self.addCleanup(projects.clear)
         env = patch.dict(
             os.environ,
-            {"GEMINI_API_KEY": "", "GOOGLE_API_KEY": "", "FORGE_GEMINI_MODEL": ""},
+            {"GEMINI_API_KEY": "", "GOOGLE_API_KEY": "", "FORGE_GEMINI_MODEL": "", "NOUS_API_KEY": ""},
         )
         env.start()
         self.addCleanup(env.stop)

@@ -52,6 +52,13 @@
       </div>
 
       <div class="status-metric">
+        <span class="metric-label">Datasheets</span>
+        <div class="metric-row">
+          <span id="sb-evidence" class="evidence-strip" title="Reducto reads every document for every catalog part, including alternates">Not read</span>
+        </div>
+      </div>
+
+      <div class="status-metric">
         <span class="metric-label">Known BOM</span>
         <div class="metric-row">
           <strong id="sb-total-cost" class="metric-value tabular">$53.70</strong>
@@ -81,6 +88,7 @@
       </div>
 
       <div class="statusbar-actions">
+        <button type="button" id="btn-validate-project" class="bar-btn" title="Recheck sources, Lean proofs and Pangram authorship">Validate sources &amp; proofs</button>
         <button type="button" id="btn-undo" class="bar-btn" title="Undo to previous revision" disabled>
           <svg aria-hidden="true"><use href="#undo"/></svg><span>Undo</span>
         </button>
@@ -96,12 +104,31 @@
     </div>
 
     <div id="Capabilities-pill" class="capabilities-group">
-      <span id="lean-badge" class="cap-pill" data-ready="false">Lean 4 checking…</span>
+      <button type="button" id="keys-button" class="cap-pill keys-pill" data-ready="false" title="Connect Gemini, Reducto, Pangram and Modal"><span>Keys</span></button>
       <span id="connection" class="connection" role="status"><i aria-hidden="true"></i><span>Checking Gemini…</span></span>
     </div>
   </header>
 
   <main id="main">
+    <section id="setup-view" class="setup" aria-labelledby="setup-title" hidden>
+      <form id="setup-form" class="setup-inner" autocomplete="off">
+        <p class="setup-kicker">Step 0 · Connect providers</p>
+        <h1 id="setup-title">Add your API keys</h1>
+        <p class="lede">Each provider powers one part of FORGE. Anything you leave blank falls back to an offline path, and the UI labels it. Keys are sent only to this local server, kept in memory, and never shown again.</p>
+        <div id="setup-providers" class="setup-grid"></div>
+        <div class="setup-foot">
+          <label class="setup-check"><input id="setup-remember" type="checkbox"> Remember on this machine <small>(<code>.forge-keys.local</code>, gitignored, mode 600)</small></label>
+          <button id="setup-forget" type="button" class="text-link" hidden>Forget saved keys</button>
+        </div>
+        <p id="setup-summary" class="setup-summary" role="status"></p>
+        <div class="setup-actions">
+          <button type="submit" class="primary"><span>Save and continue</span><svg aria-hidden="true"><use href="#arrow"/></svg></button>
+          <button id="setup-skip" type="button" class="text-link">Skip, use offline mode</button>
+        </div>
+        <p id="setup-message" class="feedback" role="status" aria-live="polite"></p>
+      </form>
+    </section>
+
     <section id="brief-view" class="hero" aria-labelledby="title">
       <div class="compose">
         <h1 id="title">Turn a hardware idea into a buildable design.</h1>
@@ -110,6 +137,16 @@
         <form id="composer" class="composer">
           <label for="brief">What are you building?</label>
           <textarea id="brief" name="brief" rows="4" maxlength="4000" required autocomplete="off" aria-describedby="brief-help" aria-keyshortcuts="Control+Enter Meta+Enter" placeholder="A wristband that detects finger gestures from forearm muscles and sends them to my laptop over Bluetooth. Under $100."></textarea>
+          <details class="source-policy-controls">
+            <summary>Research source policy · default 50% AI cutoff</summary>
+            <label><input id="source-policy-enabled" type="checkbox" checked> Filter original research sources with Pangram</label>
+            <label for="source-ai-cutoff">Exclude sources at or above this AI-detected fraction (%)</label>
+            <input id="source-ai-cutoff" type="number" min="0" max="100" step="1" value="50" required>
+            <label><input id="source-include-assisted" type="checkbox"> Include AI-assisted text in the cutoff</label>
+            <label for="source-max-retries">Additional source-discovery rounds</label>
+            <select id="source-max-retries"><option value="0">No retry</option><option value="1" selected>1 retry</option><option value="2">2 retries</option></select>
+            <p>Above-cutoff sources are excluded from accepted research, retained in the audit, and replaced where possible. Missing scans stay unverified. Technical documents can trigger false positives; this is an authorship policy, not a truth guarantee.</p>
+          </details>
           <div class="composer-foot">
             <span id="brief-help" class="shortcut"><kbd id="modifier">Ctrl</kbd>+<kbd>Enter</kbd></span>
             <button id="run" class="primary" type="submit">
@@ -155,7 +192,7 @@
           <h2 id="research-title" class="rg-run" tabindex="-1">forge-run</h2>
           <span class="rg-k">Nodes</span><b id="rg-nodes">0</b>
           <span class="rg-k">Edges</span><b id="rg-edges">0</b>
-          <span class="rg-k">Workers</span><b>4</b>
+          <span class="rg-k">Workers</span><b id="rg-workers">4</b>
         </div>
         <span id="map-mode" class="rg-mode"></span>
         <div class="rg-bar-group">
@@ -164,6 +201,16 @@
           <span class="rg-k">Events</span><b id="rg-events">0000</b>
         </div>
       </div>
+
+      <section id="pd-deck" class="pd" aria-labelledby="pd-title">
+        <div class="pd-head">
+          <h3 id="pd-title">Pipeline</h3>
+          <span class="rg-k">Now</span><b id="pd-current" aria-live="polite">Queued</b>
+          <b id="pd-clock" class="pd-clock">0.0 s</b>
+          <button type="button" id="pd-toggle" class="pd-toggle" aria-pressed="true">Windows</button>
+        </div>
+        <ol id="pd-rail" class="pd-rail" aria-label="Pipeline phases"></ol>
+      </section>
 
       <div id="rg-canvas" class="rg-canvas">
         <canvas id="rg-gl-back" class="rg-gl rg-gl-back" aria-hidden="true"></canvas>
@@ -179,11 +226,33 @@
           </div>
           <div id="map-detail" class="rg-detail"></div>
         </div>
+        <div id="pd-desk" class="pd-desk" aria-label="Live agent, parsing and compute windows"></div>
+        <div id="pd-dock" class="pd-dock" aria-label="Minimized windows" hidden></div>
         <div class="rg-caption" aria-hidden="true">
           <strong id="rg-caption-title">Waiting</strong>
           <span id="rg-caption-line">0 / 10 stages</span>
         </div>
       </div>
+
+      <section id="rg-swarm" class="sw" aria-labelledby="sw-title" aria-live="polite" hidden>
+        <div class="sw-bar">
+          <h3 id="sw-title">Agent swarm</h3>
+          <span class="rg-k">Engine</span><b id="sw-engine">—</b>
+          <span class="rg-k">Model</span><b id="sw-model">—</b>
+          <span class="rg-k">Done</span><b id="sw-progress">0/4</b>
+          <span class="rg-k">Running</span><b id="sw-running">0</b>
+          <span class="rg-k">Tokens</span><b id="sw-tokens">—</b>
+          <b id="sw-clock" class="sw-clock">0.0 s</b>
+        </div>
+        <div class="sw-body">
+          <ol id="sw-agents" class="sw-agents" aria-label="Specialist agents"></ol>
+          <div id="sw-lead" class="sw-lead" data-status="pending">
+            <div class="sw-agent-head"><span class="sw-idx">lead</span><span class="sw-name">Lead engineer · synthesis</span><span id="sw-lead-state" class="sw-state">queued</span></div>
+            <p id="sw-lead-text" class="sw-text">Waits for every specialist brief.</p>
+          </div>
+        </div>
+        <p id="sw-note" class="rg-foot">Advisory. Catalog checks and Lean verification decide what is accepted.</p>
+      </section>
 
       <div class="rg-panels">
         <section class="rg-panel" aria-labelledby="rg-log-title">
@@ -204,11 +273,14 @@
           <dl id="rg-output-rows" class="rg-output-rows"></dl>
           <p id="rg-gate" class="rg-gate">Research running. Nothing is built or bought without you.</p>
           <div class="rg-actions">
+            <button id="validate-research-btn" class="rg-btn" type="button" hidden>Validate sources &amp; proofs</button>
             <button id="engineer-pcb-btn" class="rg-btn" type="button" hidden>Engineer PCB</button>
             <button id="open-workbench-btn" class="rg-btn rg-btn-primary" type="button" hidden>Open engineering studio</button>
           </div>
         </section>
       </div>
+
+      <section id="research-validation-results" class="audit-results" aria-label="Research validation results" aria-live="polite" hidden></section>
 
       <div class="rg-prompt">
         <p class="rg-cmd"><span class="rg-ps">~/forge $</span> <span id="rg-cmd">research brief.md</span><i class="rg-cursor" aria-hidden="true"></i></p>
@@ -481,6 +553,8 @@
                   Proves mathematical electrical, pin, transport, and budget invariants derived from sourced component records. Does not prove physical skin-electrode SNR, RF detuning, or thermal behavior.
                 </p>
               </div>
+
+              <section id="project-validation-results" class="audit-results" aria-label="Project validation results" aria-live="polite" hidden></section>
 
               <!-- Autonomous Repair Action Box (shown when failed_count > 0) -->
               <div id="repair-card" class="repair-card" hidden>

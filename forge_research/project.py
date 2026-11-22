@@ -33,6 +33,8 @@ from .models import (
     WiringSpec,
 )
 from .verify import verify_design
+from .evidence.datasheets import require_design_evidence
+from .source_research import require_admitted_evidence
 
 ALL_PARTS_BY_ID: dict[str, Part] = {part.id: part for part in PARTS}
 
@@ -76,7 +78,7 @@ class ProjectView(BaseModel):
     project_id: UUID
     revision: int
     parent_revision: int | None = None
-    mode: Literal["offline", "gemini"]
+    mode: Literal["offline", "gemini", "nous"]
     model: str
     brief: str
     catalog_snapshot: dict[str, Part]
@@ -433,10 +435,15 @@ async def evaluate_and_commit_revision(
     next_spec: DeviceSpecification,
     *,
     label: str,
-    actor: Literal["user", "gemini", "offline_fixture", "shop_mcp"] = "user",
+    actor: Literal["user", "gemini", "nous", "offline_fixture", "shop_mcp"] = "user",
     force_verify: bool = False,
     force_geometry: bool = False,
 ) -> RevisionRecord:
+    if project.report.mode != "offline":
+        require_admitted_evidence(project.report, [project.catalog_snapshot[cid] for cid in
+                                  dict.fromkeys(c.catalog_id for c in next_spec.components)])
+        await require_design_evidence([project.catalog_snapshot[cid] for cid in
+                                       dict.fromkeys(c.catalog_id for c in next_spec.components)])
     prev = project.current
     next_rev = project.current_revision + 1
     now = datetime.now(UTC)

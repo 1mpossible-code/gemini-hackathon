@@ -26,6 +26,20 @@ export function resolveApiKey(env: Record<string, string | undefined>): string |
       /* unreadable key file: treated as missing */
     }
   }
+  return savedKey('GEMINI_API_KEY')
+}
+
+/** Key saved from the FORGE setup screen (`.forge-keys.local` at the repo root). */
+export function savedKey(name: string): string | null {
+  try {
+    const text = readFileSync(new URL('../../.forge-keys.local', import.meta.url), 'utf8')
+    for (const line of text.split('\n')) {
+      const eq = line.indexOf('=')
+      if (eq > 0 && line.slice(0, eq).trim() === name) return line.slice(eq + 1).trim() || null
+    }
+  } catch {
+    /* no saved keys */
+  }
   return null
 }
 
@@ -37,6 +51,7 @@ export interface GeminiCallOpts {
   temperature?: number
   signal?: AbortSignal
   timeoutMs?: number
+  maxAttempts?: number
 }
 
 export interface GeminiUsage {
@@ -65,7 +80,8 @@ export async function callGemini(apiKey: string, o: GeminiCallOpts, onUsage?: (u
     },
   })
   let lastErr: unknown
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const maxAttempts = Math.max(1, Math.min(3, o.maxAttempts ?? 3))
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const started = Date.now()
     const timeout = AbortSignal.timeout(o.timeoutMs ?? 180_000)
     const signal = o.signal ? AbortSignal.any([o.signal, timeout]) : timeout
@@ -87,7 +103,7 @@ export async function callGemini(apiKey: string, o: GeminiCallOpts, onUsage?: (u
         const err = new GeminiError(`Gemini ${o.model}: ${msg.slice(0, 300)}`, res.status)
         if (res.status === 429 || res.status >= 500) {
           lastErr = err
-          await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
+          if (attempt + 1 < maxAttempts) await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)))
           continue
         }
         throw err

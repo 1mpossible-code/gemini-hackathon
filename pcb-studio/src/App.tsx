@@ -256,6 +256,12 @@ function Toolbar() {
 function Prompt() {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [bodyBusy, setBodyBusy] = useState(false)
+  const bodyController = useRef<AbortController | null>(null)
+  useEffect(() => () => {
+    bodyController.current?.abort()
+    bodyController.current = null
+  }, [])
   const [log, setLog] = useState<GenLog[]>([])
   const [error, setError] = useState<string | null>(null)
   const pending = useStudio((s) => s.pendingPrompt)
@@ -272,22 +278,44 @@ function Prompt() {
   const run = async (override?: string) => {
     const text_ = override ?? text
     if (!text_.trim() || busy) return
+    bodyController.current?.abort()
+    const controller = new AbortController()
+    bodyController.current = controller
+    setBodyBusy(false)
     setBusy(true); setError(null); setLog([])
     // The off-board system follows the brief right away, even before the board arrives.
     const drafted = systemFromPrompt(text_)
     // Rename the PCB at once, so the previous design's board name is not shown while the new one is planned.
     setStudio({ system: drafted, board: { ...getStudio().board, name: `${drafted.name} board (planning…)` }, scale: 'system', view: '3d', exploded: false, selected: null, device: null })
     requestFit()
-    // The server can also supply the Gemini key; keep the draft if generation fails.
-    if (!hasHandBuiltBody(text_)) {
-      const layout = `PCB height above origin: ${drafted.pcbHeight} mm.\nDevices:\n` + drafted.devices.map((d) => `- ${d.label} at x=${d.x}, z=${d.z}`).join('\n')
-      void fetch('/api/chassis', { method: 'POST', headers: { 'content-type': 'application/json', 'x-gemini-key': storedGeminiKey() }, body: JSON.stringify({ prompt: text_, layout }) })
-        .then((r) => r.json())
-        .then((j: { parts?: SystemDesign['structure'] }) => {
-          if (j.parts?.length && getStudio().system.name === drafted.name) setStudio({ system: { ...getStudio().system, form: 'none', structure: j.parts } })
-        })
-        .catch(() => {})
-    }
+    // Generate only unmatched bodies; catalog peripherals retain their existing meshes.
+    void (async () => {
+      if (hasHandBuiltBody(text_)) return
+      setBodyBusy(true)
+      setLog((l) => [...l, { stage: 'body', message: 'Gemini is designing the custom body…' }])
+      const layout = `PCB height above origin: ${drafted.pcbHeight} mm.\nDevices:\n` + drafted.devices.map((d) => `- ${d.label} at x=${d.x}, y=${d.y}, z=${d.z}`).join('\n')
+      try {
+        const response = await fetch('/api/chassis', { method: 'POST', headers: { 'content-type': 'application/json', 'x-gemini-key': storedGeminiKey() }, body: JSON.stringify({ prompt: text_, layout }), signal: AbortSignal.any([controller.signal, AbortSignal.timeout(22_000)]) })
+        if (!response.ok) throw new Error(`Body generation failed (${response.status})`)
+        const j = await response.json() as { parts?: SystemDesign['structure']; reason?: string }
+        // Ignore late answers after a different design or a user edit.
+        if (controller.signal.aborted || getStudio().system !== drafted) return
+        if (j.parts?.length) {
+          const count = j.parts.length
+          setStudio({ system: { ...drafted, form: 'none', structure: j.parts } })
+          requestFit()
+          setLog((l) => [...l.slice(-5), { stage: 'body', message: `Custom body ready (${count} parts)` }])
+        } else if (j.reason !== 'built-in') {
+          setError(j.reason === 'no-key'
+            ? 'Custom body needs a Gemini API key. Showing the local enclosure.'
+            : 'Gemini could not produce a valid body. Showing the local enclosure.')
+        }
+      } catch {
+        if (!controller.signal.aborted && getStudio().system === drafted) setError('Custom body generation failed. Showing the local enclosure.')
+      } finally {
+        if (bodyController.current === controller) setBodyBusy(false)
+      }
+    })()
     try {
       const loader = aiModules['./ai/generate.ts']
       if (!loader) throw new Error('Generation service not installed')
@@ -311,7 +339,7 @@ function Prompt() {
       className="absolute left-1/2 top-4 z-10 w-[min(560px,calc(100%-32px))] -translate-x-1/2"
     >
       <AnimatePresence>
-        {(busy || error) && (
+        {(busy || bodyBusy || error) && (
           <motion.div
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}

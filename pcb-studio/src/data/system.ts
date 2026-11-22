@@ -1,6 +1,8 @@
 // System-scale assembly: the custom PCB plus the off-board devices it drives.
 // Coordinates in mm, world X right, Z toward the viewer (rover front is -Z).
 import { byId, catalog, type CatalogItem } from './catalog'
+import { WEARABLE, VEHICLE, FLYER, EYEWEAR, BREWER, LAMP, PRINTER } from './bodyPolicy'
+export { hasBuiltInBody as hasHandBuiltBody } from './bodyPolicy'
 
 export type Bus = 'power' | 'motor' | 'i2c' | 'gpio' | 'data'
 
@@ -81,9 +83,6 @@ export const defaultSystem: SystemDesign = {
 
 // ---------------------------------------------------------------- generated systems
 
-const WEARABLE = /(wrist|bracelet|wearable|smartwatch|\bwatch\b|armband|forearm|glove|sleeve|\bstrap\b|\bband\b)/i
-// Whole words only: a loose match turned "card", "cardiac" and "motor driver" briefs into rovers.
-const VEHICLE = /\b(rovers?|robots?|cars?|wheel(s|ed)?|4wd|2wd|chassis|tanks?|buggy|drive(s|train)?|line[- ]follow(er|ing)?)\b/i
 const SKIP: string[] = ['board', 'mcu', 'module', 'passive', 'connector', 'driver', 'indicator']
 // Words that map to catalog items even when the brief does not name the part.
 const SYNONYMS: [RegExp, string][] = [
@@ -219,7 +218,6 @@ function plate(text: string, picks: CatalogItem[]): SystemDesign {
  * a wrist band, everything else a mounting plate with the devices the brief asks
  * for. Never empty: with no matches it falls back to a status display and button.
  */
-const FLYER = /\b(drone|quad(copter)?|fpv|multirotor|uav|hexa(copter)?|octo(copter)?|copter)\b/i
 
 /** Multirotor airframe around a centre plate: arms, motors, rotors and skids. */
 function airframe(text: string, picks: CatalogItem[]): SystemDesign {
@@ -240,8 +238,6 @@ function airframe(text: string, picks: CatalogItem[]): SystemDesign {
   }
   return { ...base, name: titleFor(text, 'Airframe A1'), structure }
 }
-
-const EYEWEAR = /\b(glasses|goggles|spectacles|eyewear|sunglasses|visor|hud)\b/i
 
 /** Spectacle frame: rims, lenses, bridge, hinges and temples, with devices along the temples. */
 function eyewear(text: string, picks: CatalogItem[]): SystemDesign {
@@ -293,10 +289,6 @@ function tray(sys: SystemDesign): SystemDesign {
   }
   return { ...sys, structure }
 }
-
-const BREWER = /\b(coffee|espresso|brew(er|ing)?)\b/i
-const LAMP = /\b(lamp|desk light|task light)\b/i
-const PRINTER = /\b(3d ?print(er|ing)?|printer)\b/i
 
 /** Electronics on a base plate with a hand-built product body around them. */
 function shaped(text: string, picks: CatalogItem[], fallback: string, body: (w: number, d: number) => Prim[]): SystemDesign {
@@ -365,12 +357,6 @@ const printer = (w: number, d: number): Prim[] => {
   parts.push({ shape: 'box', size: [8, 70, 8], pos: [0, top + 35, -fz], mat: 'metal' })
   return parts
 }
-
-/**
- * True when the brief has a hand-built body, which a generated chassis must not replace.
- * The rover plate and the wrist band count: a generated chassis drops them (form 'none').
- */
-export const hasHandBuiltBody = (text: string) => [FLYER, EYEWEAR, WEARABLE, VEHICLE, BREWER, PRINTER, LAMP].some((re) => re.test(text))
 
 export function systemFromPrompt(text: string): SystemDesign {
   const picks = devicesForBrief(text)

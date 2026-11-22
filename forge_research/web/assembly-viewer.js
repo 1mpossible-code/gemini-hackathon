@@ -41,8 +41,10 @@ function disposeModel(model) {
 }
 
 export class AssemblyViewer {
-  constructor(container, onPick, onContextLost) {
+  constructor(container, onPick, onContextLost, onHover) {
     this.onPick = onPick;
+    this.onHover = onHover;
+    this.hoverFrame = 0;
     this.scene = new Scene();
     this.camera = new PerspectiveCamera(35, 1, 0.004, 12);
     this.renderer = new WebGLRenderer({ antialias: true, alpha: true });
@@ -88,6 +90,21 @@ export class AssemblyViewer {
     canvas.addEventListener("pointerup", event => this.pick(event));
     canvas.addEventListener("pointercancel", () => {
       this.pointerStart = null;
+    });
+    canvas.addEventListener("pointermove", event => {
+      if (!this.onHover || event.buttons) {
+        if (event.buttons) this.onHover?.(null, event.clientX, event.clientY);
+        return;
+      }
+      const { clientX, clientY } = event;
+      cancelAnimationFrame(this.hoverFrame);
+      this.hoverFrame = requestAnimationFrame(() =>
+        this.onHover(this.idAt(clientX, clientY), clientX, clientY)
+      );
+    });
+    canvas.addEventListener("pointerleave", event => {
+      cancelAnimationFrame(this.hoverFrame);
+      this.onHover?.(null, event.clientX, event.clientY);
     });
 
     this.scene.add(new HemisphereLight(0xf2f3f0, 0x5c626b, 2.2));
@@ -243,23 +260,27 @@ export class AssemblyViewer {
     ) {
       return;
     }
+    const id = this.idAt(event.clientX, event.clientY);
+    if (id) this.onPick?.(id);
+  }
+
+  idAt(clientX, clientY) {
+    if (!this.model) return null;
     const bounds = this.renderer.domElement.getBoundingClientRect();
     const pointer = new Vector2(
-      (2 * (event.clientX - bounds.left)) / bounds.width - 1,
-      1 - (2 * (event.clientY - bounds.top)) / bounds.height
+      (2 * (clientX - bounds.left)) / bounds.width - 1,
+      1 - (2 * (clientY - bounds.top)) / bounds.height
     );
     this.raycaster.setFromCamera(pointer, this.camera);
     for (const hit of this.raycaster.intersectObject(this.model, true)) {
       let object = hit.object;
       while (object && object !== this.model) {
         const id = this.nodeIds.get(object.name);
-        if (id) {
-          this.onPick?.(id);
-          return;
-        }
+        if (id) return id;
         object = object.parent;
       }
     }
+    return null;
   }
 
   orbitWithKey(event) {

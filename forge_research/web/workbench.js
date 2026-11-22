@@ -1,3 +1,6 @@
+import { clearValidation, runValidation } from "./validation.js";
+import { createEvidenceHover, prefetchAllEvidence, renderEvidenceBundle } from "./evidence-card.js";
+
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 const numFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 
@@ -66,6 +69,51 @@ export function getCurrentProject() {
   return currentProject;
 }
 
+const evidenceHover = createEvidenceHover({
+  getPart: id => catalogById.get(id),
+  // The design's supply rail feeds the sensor, so mark it on the sensor's
+  // supply gauge. A controller's input range is a different net.
+  getRailMv: part => (part?.role === "emg_sensor" ? currentProject?.device_spec.wiring.supply_rail_mv : null),
+});
+
+function catalogIdForGroup(groupId) {
+  if (!currentProject) return null;
+  const comps = currentProject.device_spec.components;
+  if (groupId === "sensor-2") return comps.find(c => c.role === "emg_sensor")?.catalog_id ?? null;
+  const comp = comps.find(c => c.instance_id === groupId);
+  if (comp) return comp.catalog_id;
+  const node = currentProject.manifest?.nodes.find(n => (n.part_instance_id || n.id) === groupId && n.catalog_id);
+  return node?.catalog_id ?? null;
+}
+
+let evidencePoll = null;
+async function refreshEvidenceStrip() {
+  const strip = $("#sb-evidence");
+  const index = await prefetchAllEvidence();
+  if (!strip || !index) return;
+  const states = Object.entries(index.parts);
+  const ready = states.filter(([, s]) => s !== "pending").length;
+  const total = Object.keys(index.documents).length;
+  const docs = Object.values(index.documents).reduce((a, b) => a + b, 0);
+  strip.replaceChildren(
+    ...Object.keys(index.documents).map(id => {
+      const dot = el("i", "", index.parts[id] === "pending" ? "pending" : index.parts[id] ? "ready" : "");
+      dot.title = `${catalogById.get(id)?.name || id}: ${index.parts[id] || "queued"}`;
+      return dot;
+    }),
+    el(
+      "span",
+      index.reducto_enabled
+        ? `${ready}/${total} parts · ${docs} docs`
+        : `${total} parts · catalog only`
+    )
+  );
+  clearTimeout(evidencePoll);
+  if (states.some(([, s]) => s === "pending") || ready < total) {
+    evidencePoll = setTimeout(refreshEvidenceStrip, 2500);
+  }
+}
+
 function ensureViewer() {
   viewerPromise ??= import("./assembly-viewer.js")
     .then(
@@ -76,7 +124,8 @@ function ensureViewer() {
           () => {
             $("#viewport-status").textContent =
               "WebGL context lost. Inspect BOM, Lean proofs, or download GLB.";
-          }
+          },
+          (groupId, x, y) => evidenceHover.show(groupId && catalogIdForGroup(groupId), x, y)
         )
     )
     .catch(() => null);
@@ -92,6 +141,11 @@ export async function loadProjectIntoWorkbench(project, report = null) {
   ) {
     // Reject out-of-order stale response
     return;
+  }
+  if (currentProject?.project_id !== project.project_id || currentProject?.revision !== project.revision) {
+    clearValidation($("#project-validation-results"));
+    $("#btn-validate-project").disabled = false;
+    $("#btn-validate-project").textContent = "Validate sources & proofs";
   }
   const isNewProject = !currentProject || currentProject.project_id !== project.project_id;
   currentProject = project;
@@ -109,6 +163,7 @@ export async function loadProjectIntoWorkbench(project, report = null) {
   $("#nav-context").textContent = "Workbench";
 
   if (isNewProject) {
+    refreshEvidenceStrip();
     loadedGlbKey = null;
     selectedGroupId = "board";
     $("#repair-outcome-banner").hidden = true;
@@ -292,6 +347,14 @@ function renderLeftControls(project) {
     })
   );
   if (ctrlComp) ctrlSelect.value = ctrlComp.catalog_id;
+  if (!ctrlSelect.dataset.evidenceBound) {
+    // Hovering the controller picker previews the selected part's datasheet bundle;
+    // every alternate was already read in the background, so swaps are instant.
+    ctrlSelect.dataset.evidenceBound = "1";
+    ctrlSelect.addEventListener("pointermove", e => evidenceHover.show(ctrlSelect.value, e.clientX, e.clientY));
+    ctrlSelect.addEventListener("pointerleave", () => evidenceHover.hide());
+    ctrlSelect.addEventListener("change", () => evidenceHover.hide());
+  }
 
   // Electrical controls populated from active controller
   const activeCtrl = ctrlComp ? catalogById.get(ctrlComp.catalog_id) : null;
@@ -388,6 +451,7 @@ function renderBom(project) {
       pickBtn.addEventListener("click", () =>
         selectComponentOrNode(item.instance_id, { switchTab: true })
       );
+      evidenceHover.bind(pickBtn, item.catalog_id);
 
       const priceCol = el("div", "", "bom-price-col");
       const extText =
@@ -484,6 +548,8 @@ function renderSceneChips(project) {
       btn.type = "button";
       btn.setAttribute("aria-pressed", String(gid === selectedGroupId));
       btn.addEventListener("click", () => selectComponentOrNode(gid, { switchTab: true }));
+      const catalogId = catalogIdForGroup(gid);
+      if (catalogId) evidenceHover.bind(btn, catalogId);
       return btn;
     })
   );
@@ -610,6 +676,13 @@ function renderInspector(project) {
       }
     }
     container.append(linkWrap);
+  }
+  if (part) {
+    renderEvidenceBundle(
+      container,
+      part,
+      part.role === "emg_sensor" ? project.device_spec.wiring.supply_rail_mv : null
+    );
   }
 
   // Relevant verification checks
@@ -1218,6 +1291,15 @@ async function selectMerchantOffer(instanceId, offerId) {
 }
 
 export function bindWorkbenchEvents(onNewBrief, onShowGraph) {
+  $("#btn-validate-project").addEventListener("click", () => {
+    if (!currentProject) return;
+    switchInspectorTab("proofs");
+    runValidation({
+      url: `/api/projects/${encodeURIComponent(currentProject.project_id)}/validate`,
+      body: { base_revision: currentProject.revision },
+      target: $("#project-validation-results"), button: $("#btn-validate-project"),
+    });
+  });
   // Status bar actions
   $("#sb-proof-summary").addEventListener("click", () => switchInspectorTab("proofs"));
   $("#btn-undo").addEventListener("click", () => {

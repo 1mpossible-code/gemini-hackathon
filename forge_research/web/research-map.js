@@ -3,6 +3,8 @@
 // dispatch and the human gate sit underneath. All values come from the stream.
 // Wires, packets and cube lattices render in WebGL (research-gl.js).
 import { createGraphGL } from "./research-gl.js";
+import { applySwarmEvent, finishSwarm, resetSwarm } from "./swarm-panel.js";
+import { applyDeckEvent, finishDeck, resetDeck } from "./pipeline-deck.js";
 
 const $ = id => document.getElementById(id);
 const money = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
@@ -16,6 +18,7 @@ const STAGES = {
   sensor: { name: "catalog.emg", label: "EMG sensors", worker: 2, copy: "Sensor candidates from the catalog." },
   compatibility: { name: "compat.gate", label: "Compatibility", worker: 3, copy: "Check that the parts work together and fit the budget." },
   reviewer: { name: "design.review", label: "Design review", worker: 3, copy: "Surface open questions and next steps." },
+  evidence: { name: "datasheet.verify", label: "Datasheet verification", worker: 3, copy: "Compare independent Reducto and Gemini PDF reads before building." },
   hold: { name: "build.hold", label: "Build hold", worker: 3, copy: "Keep the report when the build cannot proceed." },
   geometry: { name: "geometry.build", label: "Geometry", worker: 4, copy: "Assemble the enclosure and parts." },
   verification: { name: "lean.verify", label: "Lean 4 proofs", worker: 4, copy: "Prove the electrical and budget obligations." },
@@ -31,20 +34,20 @@ const INPUTS = {
 // Grid placement: columns follow the flow left to right.
 const LAYOUT = {
   requirements: [1, 1], sourcing: [1, 2], controller: [1, 3], sensor: [1, 4],
-  compatibility: [2, 1], reviewer: [2, 2], hold: [2, 3],
+  compatibility: [2, 1], reviewer: [2, 2], evidence: [2, 3], hold: [2, 4],
   geometry: [3, 1], verification: [3, 2], export: [3, 3], gate: [3, 4],
 };
 const FLOW = [
   ["requirements", "sourcing"], ["sourcing", "controller"], ["sourcing", "sensor"],
   ["sourcing", "compatibility"], ["compatibility", "reviewer"], ["compatibility", "hold"],
-  ["reviewer", "geometry"], ["geometry", "verification"], ["geometry", "export"],
+  ["reviewer", "evidence"], ["evidence", "geometry"], ["evidence", "hold"], ["geometry", "verification"], ["geometry", "export"],
   ["export", "gate"], ["verification", "gate"],
 ];
 const FEEDS = { requirements: ["brief", "constraints"], sourcing: ["catalog"], controller: ["catalog"], sensor: ["catalog"], compatibility: ["budget", "constraints"], verification: ["budget"] };
 const WORKERS = [
   { id: "w1", name: "brief.agent", stages: ["requirements"] },
   { id: "w2", name: "sourcing.agent", stages: ["sourcing", "controller", "sensor"] },
-  { id: "w3", name: "review.agent", stages: ["compatibility", "reviewer", "hold"] },
+  { id: "w3", name: "review.agent", stages: ["compatibility", "reviewer", "evidence", "hold"] },
   { id: "w4", name: "build.kernel", stages: ["geometry", "verification", "export"] },
 ];
 const STATE_LABEL = { pending: "queued", running: "run", completed: "done", skipped: "skip", failed: "fail", stopped: "stop", gate: "await" };
@@ -164,8 +167,7 @@ function short(value, size = 18) {
   return textValue.length > size ? textValue.slice(0, size - 1) + "…" : textValue;
 }
 function canEngineer() {
-  // Any finished run can be engineered: the PCB studio designs from the brief alone.
-  return !!report;
+  return !!report && !report.evidence_blocked;
 }
 
 const ROWS = {
@@ -211,6 +213,7 @@ const ROWS = {
     return [["outcome", short(d.outcome)], ["subtotal", usd(d.core_subtotal_usd_cents)], ["findings", d.findings?.length ?? DASH]];
   },
   reviewer: () => [["steps", data("reviewer").next_steps?.length ?? DASH], ["agent", "reviewer"], ["output", "notes"]],
+  evidence: () => [["readers", "Reducto + Gemini"], ["gate", report?.evidence_blocked ? "blocked" : state.get("evidence")?.status === "completed" ? "agreed" : DASH]],
   hold: () => {
     const s = state.get("hold");
     return [["branch", s?.status === "completed" ? "armed" : s?.status === "skipped" ? "clear" : DASH], ["reason", short(s?.summary, 16)], ["report", "kept"]];
@@ -594,6 +597,9 @@ export function showResearchMap(runMode, runBrief) {
   $("rg-events").textContent = "0000";
   $("rg-gate").textContent = "Research running. Nothing is built or bought without you.";
   log.replaceChildren();
+  resetSwarm(mode);
+  resetDeck(mode, brief);
+  $("rg-workers").textContent = "4";
   showStatus("running", "Starting");
   setFollow(true);
   renderAll();
@@ -602,6 +608,30 @@ export function showResearchMap(runMode, runBrief) {
 }
 
 export function applyResearchEvent(event) {
+  applyDeckEvent(event);
+  if (event.type === "compute") {
+    if (event.detail) addLog(event.provider === "modal" ? "modal" : "local", event.event, event.detail);
+    return;
+  }
+  if (event.type === "source_audit") {
+    bump(event, "evidence");
+    if (event.event === "decision") {
+      addLog("sources", event.source.decision, `${event.source.document.title}: ${event.source.reason}`);
+    } else if (event.event === "round" || event.event === "retry") {
+      addLog("sources", "discovery", event.detail || `Source round ${event.round}/${event.max_rounds}`);
+    } else if (event.event === "complete") {
+      const accepted = event.audit.sources.filter(s => s.decision === "accepted").length;
+      update("evidence", event.audit.status === "accepted" ? "running" : "failed", `${accepted}/${event.audit.sources.length} sources admitted after ${event.audit.rounds} rounds.`, null, `${accepted} admitted`, { log: true });
+    }
+    return;
+  }
+  if (event.type === "swarm") {
+    bump(event);
+    if (event.event === "start") $("rg-workers").textContent = String(4 + (event.agents?.length ?? 0));
+    const line = applySwarmEvent(event);
+    if (line) addLog(line[0] === "swarm" || line[0] === "lead" ? "sw" : "a" + ((event.index ?? 0) + 1), line[0], line[1]);
+    return;
+  }
   if (event.type === "run") {
     bump(event);
     showStatus("running", "Research live");
@@ -644,6 +674,8 @@ export function applyResearchEvent(event) {
 
 export function finishResearchMap(outcome, message, finalReport) {
   if (finalReport) report = finalReport;
+  finishSwarm(outcome);
+  finishDeck(outcome, finalReport);
   for (const [id, step] of state) {
     if (id === "gate") continue;
     if (step.status === "pending") step.status = "skipped";
@@ -653,7 +685,9 @@ export function finishResearchMap(outcome, message, finalReport) {
   state.get("gate").status = ready ? "gate" : outcome === "completed" ? "skipped" : outcome === "stopped" ? "stopped" : "failed";
   const labels = { completed: "Complete", failed: "Failed", stopped: "Stopped" };
   showStatus(outcome, labels[outcome]);
-  $("rg-gate").textContent = ready
+  $("rg-gate").textContent = report?.evidence_blocked
+    ? "Build blocked. Review the datasheet verification findings or run the offline sample."
+    : ready
     ? "Research done. Sending the brief to the PCB studio."
     : outcome === "completed"
       ? "Research done. Sending the brief to the PCB studio."
@@ -667,16 +701,16 @@ export function finishResearchMap(outcome, message, finalReport) {
   $("stop-research").hidden = true;
   $("edit-brief").hidden = false;
   $("open-workbench-btn").hidden = !(outcome === "completed" && report?.project);
-  $("engineer-pcb-btn").hidden = outcome === "stopped";
+  $("engineer-pcb-btn").hidden = outcome === "stopped" || !canEngineer();
   renderAll();
   if (stoppedFromButton) $("edit-brief").focus();
 }
 
-export async function readResearch(runMode, runBrief, signal, onEvent) {
+export async function readResearch(runMode, runBrief, signal, onEvent, sourcePolicy = undefined) {
   const response = await fetch("/api/research/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(runMode === "sample" ? { mode: runMode } : { mode: runMode, brief: runBrief }),
+    body: JSON.stringify(runMode === "sample" ? { mode: runMode } : { mode: runMode, brief: runBrief, ...(sourcePolicy ? { source_policy: sourcePolicy } : {}) }),
     signal,
   });
   if (!response.ok) {

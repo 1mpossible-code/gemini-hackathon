@@ -53,6 +53,13 @@ export interface Net {
 }
 
 export interface Board {
+  /** Provenance of the original generation inputs, never a certificate for this board or later edits. */
+  researchHandoff?: {
+    envelope: import('../ai/researchHandoff.ts').ResearchEnvelope
+    partMapping: import('../ai/researchConstraints.ts').ResearchPartMapping[]
+    scope: string
+    pcbValidation: 'required'
+  }
   name: string
   revision: string
   width: number

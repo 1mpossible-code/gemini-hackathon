@@ -56,7 +56,7 @@ async def run_research(
     brief: str,
     model: str | BaseLlm,
     *,
-    mode: Literal["offline", "gemini"],
+    mode: Literal["offline", "gemini", "nous"],
     progress: Progress | None = None,
 ) -> ResearchReport:
     brief = brief.strip()

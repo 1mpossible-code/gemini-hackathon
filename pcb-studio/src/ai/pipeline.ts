@@ -5,6 +5,7 @@ import { checkBoard } from './check'
 import { buildBoardNets, validateNets, type NetIssue, type ProposedNet } from './netlist'
 import { groundVias, isEdgeConnector, placeParts, type Edge, type PlaceHint } from './place'
 import type { CatalogItem, GenEvent, GenRequest, GenStage, LlmCall, Schema } from './types'
+import { mapResearchParts, requireResearchParts, researchInstructions } from './researchConstraints'
 export { offlineLlm } from './offline'
 
 /**
@@ -257,13 +258,22 @@ export async function runPipeline(req: GenRequest, deps: PipelineDeps): Promise<
   // ---- 1. plan
   emit({ type: 'stage', stage: 'plan', message: 'Reading the catalog and planning the architecture', ms: 0 })
   const cat = await loadCatalog()
+  const researchMapping = req.research ? mapResearchParts(req.research, cat.items.flatMap((item) => {
+    try { const part = cat.makePart(item, 'U0'); return [{ id: item.id, manufacturer: part.manufacturer, mpn: part.mpn }] }
+    catch { return [] }
+  })) : []
+  const researchText = req.research ? researchInstructions(req.research, researchMapping) : ''
+  if (req.research) warnings.push(req.research.snapshot.scope)
   if (cat.source === 'fallback') warnings.push(`Using the built-in parts list (${cat.note ?? 'catalog unavailable'})`)
   else if (cat.note) warnings.push(cat.note)
   const digestItems = digestFor(cat, req.prompt)
+  for (const required of researchMapping) {
+    if (!digestItems.some((i) => i.id === required.catalogId)) digestItems.push(cat.byId.get(required.catalogId)!)
+  }
   const ids = digestItems.map((i) => i.id)
   const planRaw = await llm({
     model: 'argon',
-    system: PLAN_SYSTEM,
+    system: `${PLAN_SYSTEM}\n${researchText}`,
     prompt: `Request: ${req.prompt}\n${constraintText ? `Constraints:\n${constraintText}\n` : ''}\nCatalog (id | name | category | interfaces | voltage | current | footprint | pads | description):\n${catalogDigest(digestItems)}`,
     schema: planSchema(ids),
   })
@@ -322,6 +332,7 @@ export async function runPipeline(req: GenRequest, deps: PipelineDeps): Promise<
     hints.push({ ref, role: pp.role, near: near && near !== ref ? near : undefined, edge: pp.edge })
   }
   if (!parts.length) throw new Error('No usable parts after catalog matching')
+  requireResearchParts(researchMapping, parts)
   // only hint "near" toward refs that exist
   for (const h of hints) if (h.near && !parts.some((p) => p.ref === h.near)) h.near = undefined
 
@@ -336,7 +347,7 @@ export async function runPipeline(req: GenRequest, deps: PipelineDeps): Promise<
   const block = partsBlock(parts, planned, pinNames)
   const netsRaw = await llm({
     model: 'argon',
-    system: NETS_SYSTEM,
+    system: `${NETS_SYSTEM}\n${researchText}`,
     prompt: `Board: ${plan.name}\nRequest: ${req.prompt}\nArchitecture: ${plan.summary}\nSupply: ${plan.supply}\n\nParts and pins:\n${block}`,
     schema: NETS_SCHEMA,
   })
@@ -350,7 +361,7 @@ export async function runPipeline(req: GenRequest, deps: PipelineDeps): Promise<
     stage('check', `${v.issues.length} netlist issue(s); repairing with Gemini carbon (attempt ${attempt})`)
     const fixed = await llm({
       model: 'carbon',
-      system: `${NETS_SYSTEM}\nYou are repairing an existing netlist: fix every listed issue, keep everything else unchanged, and return the COMPLETE corrected netlist.`,
+      system: `${NETS_SYSTEM}\n${researchText}\nYou are repairing an existing netlist: fix every listed issue, keep everything else unchanged, and return the COMPLETE corrected netlist.`,
       prompt: `Parts and pins:\n${block}\n\nCurrent netlist:\n${JSON.stringify({ nets: proposed })}\n\nIssues:\n${fmtIssues(v.issues)}`,
       schema: NETS_SCHEMA,
     })
@@ -373,6 +384,12 @@ export async function runPipeline(req: GenRequest, deps: PipelineDeps): Promise<
   }
   const nets = buildBoardNets(base, v.nets)
   const board: Board = { ...base, nets, groundVias: [] }
+  if (req.research) board.researchHandoff = {
+    envelope: req.research.envelope,
+    partMapping: researchMapping,
+    scope: req.research.snapshot.scope,
+    pcbValidation: 'required',
+  }
   board.groundVias = groundVias(board, routeNets(board))
   const drc = checkBoard(board)
   if (drc.errors.length) throw new Error(`Board check failed: ${drc.errors.slice(0, 5).join('; ')}`)

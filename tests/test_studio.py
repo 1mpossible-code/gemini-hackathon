@@ -12,6 +12,8 @@ from forge_research.geometry import GeometryError
 from forge_research.offline import DEMO_BRIEF
 from forge_research.studio import ResearchRequest, app, projects, research_events
 
+os.environ.setdefault("FORGE_ENCLOSURE", "off")  # skip the CadQuery enclosure job in fast tests
+
 CONTROLLER = "esp32-devkitc-32e"
 SENSOR = "myoware-2-dev-27924"
 STALE = "This prototype changed. Reload your report before editing it."
@@ -49,7 +51,7 @@ class StudioApiTests(unittest.TestCase):
         # Blank credentials so a developer shell cannot turn a test into a live call.
         env = patch.dict(
             os.environ,
-            {"GEMINI_API_KEY": "", "GOOGLE_API_KEY": "", "FORGE_GEMINI_MODEL": ""},
+            {"GEMINI_API_KEY": "", "GOOGLE_API_KEY": "", "FORGE_GEMINI_MODEL": "", "NOUS_API_KEY": ""},
         )
         env.start()
         self.addCleanup(env.stop)
@@ -68,7 +70,11 @@ class StudioApiTests(unittest.TestCase):
         with self.client.stream("POST", "/api/research/stream", json=request) as response:
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.headers["content-type"], "application/x-ndjson")
-            return [json.loads(line) for line in response.iter_lines()]
+            events = [json.loads(line) for line in response.iter_lines()]
+        # The advisory agent swarm and compute jobs stream alongside; covered elsewhere.
+        return [event for event in events if event["type"] not in ("swarm", "compute")]
+
+
 
     def test_stream_exposes_actual_research_and_build_steps(self):
         events = self.stream_events({"mode": "sample"})

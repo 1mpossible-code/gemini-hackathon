@@ -4,6 +4,8 @@ import { loadEnv, runnerImport, type Plugin } from 'vite'
 import { callGemini, MODELS, resolveApiKey, type GeminiUsage } from './gemini.ts'
 import { readJson, sendJson } from './http.ts'
 import { chassisHandler } from './chassis.ts'
+import { resolveResearchHandoff } from './research-handoff.ts'
+import type { ResearchContext } from '../src/ai/researchHandoff.ts'
 
 /**
  * Vite dev + preview middleware for AI board generation.
@@ -27,7 +29,7 @@ type GenEvent = { type: string; stage?: Stage; [k: string]: unknown }
 type Llm = (o: { model: 'argon' | 'carbon'; system: string; prompt: string; schema: Record<string, unknown> }) => Promise<unknown>
 interface PipelineModule {
   runPipeline(
-    req: { prompt: string; constraints?: Record<string, unknown> },
+    req: { prompt: string; constraints?: Record<string, unknown>; research?: ResearchContext },
     deps: { llm: Llm; emit: (e: GenEvent) => void; signal?: AbortSignal },
   ): Promise<{ board: unknown; warnings: string[]; catalogVersion: string; timings: Record<string, number> }>
   /** deterministic key-free planner (src/ai/offline.ts); one instance per generation */
@@ -82,10 +84,18 @@ export function forgeAi(): Plugin {
       const started = Date.now()
       const usage: GeminiUsage[] = []
       try {
+        const research = body.research === undefined ? undefined : await resolveResearchHandoff(
+          body.research, env.FORGE_RESEARCH_URL ?? 'http://127.0.0.1:8000', ac.signal,
+        )
+        if (research && (prompt !== research.snapshot.brief.slice(0, 2000).trim() || constraints)) {
+          throw new Error('Research handoff inputs changed. Start new research for the revised requirements.')
+        }
+        const generation = { prompt: research?.snapshot.brief ?? prompt, constraints, research }
+        if (research) send({ type: 'stage', stage: 'plan', message: `Loaded saved research (${research.snapshot.kind}); PCB checks remain separate`, ms: Date.now() - started })
         const mod = await load()
         const offline = () => {
           send({ type: 'stage', stage: 'plan', message: 'Using the offline planner (deterministic, no AI model)', ms: Date.now() - started })
-          return mod.runPipeline({ prompt, constraints }, { signal: ac.signal, emit: send, llm: mod.offlineLlm() })
+          return mod.runPipeline(generation, { signal: ac.signal, emit: send, llm: mod.offlineLlm() })
         }
         let result: Awaited<ReturnType<PipelineModule['runPipeline']>>
         let mode = 'gemini'
@@ -96,7 +106,7 @@ export function forgeAi(): Plugin {
         } else {
           try {
             result = await mod.runPipeline(
-              { prompt, constraints },
+              generation,
               {
                 signal: ac.signal,
                 emit: send,
@@ -105,6 +115,8 @@ export function forgeAi(): Plugin {
             )
           } catch (e) {
             if (ac.signal.aborted) throw e
+            // Research gates and exact-part failures must never trigger a substitute design.
+            if (research) throw e
             const why = (e as Error).message || 'unknown error'
             log(`Gemini generation failed at ${lastStage ?? 'start'} (${why}); falling back to the offline planner`)
             mode = 'offline (Gemini failed)'

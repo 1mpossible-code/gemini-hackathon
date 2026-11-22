@@ -1,5 +1,6 @@
 import type { Board } from '@/data/board'
 import type { GenConstraints, GenEvent } from './types'
+import { researchForPrompt } from './researchHandoff'
 
 export type { GenConstraints, GenEvent, GenStage } from './types'
 
@@ -24,7 +25,7 @@ export async function generateBoard(
   const res = await fetch(opts.endpoint ?? '/api/generate', {
     method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/x-ndjson', ...keyHeader() },
-    body: JSON.stringify({ prompt, constraints: opts.constraints }),
+    body: JSON.stringify({ prompt, constraints: opts.constraints, research: researchForPrompt(prompt) }),
     signal: opts.signal,
   })
   if (!res.ok || !res.body) {

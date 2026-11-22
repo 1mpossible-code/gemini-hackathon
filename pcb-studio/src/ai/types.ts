@@ -1,4 +1,5 @@
 import type { Board, PartKind } from '@/data/board'
+import type { ResearchContext } from './researchHandoff'
 
 export type GenStage = 'plan' | 'select' | 'place' | 'route' | 'check'
 
@@ -21,6 +22,8 @@ export interface GenConstraints {
 export interface GenRequest {
   prompt: string
   constraints?: GenConstraints
+  /** Server-resolved saved snapshot; never accepted directly from a request body. */
+  research?: ResearchContext
 }
 
 /** Catalog entry normalised to what the generator needs, independent of the catalog module's exact shape. */
